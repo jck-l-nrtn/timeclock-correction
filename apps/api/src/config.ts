@@ -33,6 +33,24 @@ export const config = {
     webhookUrl: optional("NOTIFY_WEBHOOK_URL"),
   },
 
+  // Email (SMTP — works with Gmail, SES, Resend, Mailgun, etc.).
+  email: {
+    smtpHost: optional("SMTP_HOST"),
+    smtpPort: Number(optional("SMTP_PORT", "587")),
+    smtpUser: optional("SMTP_USER"),
+    smtpPass: optional("SMTP_PASS"),
+    from: optional("EMAIL_FROM"),
+    // Where new-request alerts and the weekly report are sent (the admin/owner).
+    notifyTo: optional("NOTIFY_EMAIL_TO"),
+  },
+
+  // Weekly pay-period report. `token` gates the send endpoint that the scheduler hits.
+  reports: {
+    token: optional("REPORT_TOKEN"),
+  },
+
+  orgName: optional("ORG_NAME", "Montane Packaging"),
+
   // Admin auth (Phase 4). Dev fallback lets the skeleton run without Jibble SSO.
   auth: {
     devLoginEnabled: optional("DEV_LOGIN_ENABLED", "true") === "true",

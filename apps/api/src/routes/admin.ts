@@ -7,6 +7,7 @@ import { buildDigitalRecord } from "../services/digitalRecord.js";
 import { notifier } from "../services/notify.js";
 import { hashPassword } from "../services/passwords.js";
 import { config } from "../config.js";
+import { buildPayPeriodPdf, defaultWeekRange } from "../services/payPeriodReport.js";
 import { toCorrectionRequestDTO } from "../mappers.js";
 
 export const adminRouter = Router();
@@ -99,6 +100,22 @@ adminRouter.get("/requests", async (req, res) => {
     orderBy: { createdAt: "asc" },
   });
   return res.json(rows.map(toCorrectionRequestDTO));
+});
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * GET /api/admin/reports/pay-period.pdf[?from&to]
+ * Download the pay-period sign-off PDF on demand (defaults to the last 7 days).
+ */
+adminRouter.get("/reports/pay-period.pdf", async (req, res) => {
+  const def = defaultWeekRange();
+  const from = typeof req.query.from === "string" && DATE_RE.test(req.query.from) ? req.query.from : def.from;
+  const to = typeof req.query.to === "string" && DATE_RE.test(req.query.to) ? req.query.to : def.to;
+  const { buffer } = await buildPayPeriodPdf(from, to);
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="timeclock-corrections-${from}_to_${to}.pdf"`);
+  return res.send(buffer);
 });
 
 /**

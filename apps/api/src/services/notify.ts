@@ -1,5 +1,12 @@
 import { config } from "../config.js";
 import type { CorrectionRequestDTO } from "@timesheet/shared";
+import { sendEmail } from "./email.js";
+
+const EVENT_LABEL: Record<string, string> = {
+  in: "missed clock-in",
+  out: "missed clock-out",
+  adjust: "time adjustment",
+};
 
 /**
  * Notification boundary. Admin-facing events (new request, decision) can post to
@@ -21,6 +28,14 @@ class ConsoleNotifier implements Notifier {
       `[notify] New correction request ${r.id} from ${r.employeeName} <${r.employeeEmail}> — ` +
         `${r.eventType} on ${r.date} @ ${r.intendedTime}`
     );
+    const label = EVENT_LABEL[r.eventType] ?? r.eventType;
+    await sendEmail({
+      subject: `New timeclock correction — ${r.employeeName}`,
+      text:
+        `${r.employeeName} (${r.employeeEmail}) submitted a ${label} request.\n\n` +
+        `Date: ${r.date}\nIntended time: ${r.intendedTime}\nReason: ${r.reason}\n\n` +
+        `Review it: ${config.webOrigin}/admin`,
+    });
   }
 
   async requestDecided(r: CorrectionRequestDTO): Promise<void> {

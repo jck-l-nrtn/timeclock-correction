@@ -1,0 +1,19 @@
+name: Weekly pay-period report
+
+# Emails the pay-period sign-off PDF once a week. Set repo secrets:
+#   APP_URL       = https://employee.montanepm.com  (or the onrender.com URL)
+#   REPORT_TOKEN  = same value as the app's REPORT_TOKEN env var
+on:
+  schedule:
+    # Mondays 15:00 UTC (~8–9am Mountain), covering the previous week.
+    - cron: "0 15 * * 1"
+  workflow_dispatch: {} # allows a manual "Run workflow" from the Actions tab
+
+jobs:
+  send-report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger the pay-period report email
+        run: |
+          curl -fsS -X POST \
+            "${{ secrets.APP_URL }}/api/reports/pay-period/send?token=${{ secrets.REPORT_TOKEN }}"

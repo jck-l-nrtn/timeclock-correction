@@ -10,6 +10,7 @@ import { authRouter } from "./routes/auth.js";
 import { adminRouter } from "./routes/admin.js";
 import { timesheetRouter } from "./routes/timesheet.js";
 import { employeeRouter } from "./routes/employee.js";
+import { reportsRouter } from "./routes/reports.js";
 
 const app = express();
 
@@ -30,6 +31,7 @@ app.get("/api/health", async (_req, res) => {
 app.use("/api/requests", requestsRouter);
 app.use("/api/timesheet", timesheetRouter);
 app.use("/api/employee", employeeRouter);
+app.use("/api/reports", reportsRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/admin", adminRouter);
 

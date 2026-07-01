@@ -24,5 +24,23 @@ services:
         sync: false # paste your Neon connection string here
       - key: DEV_LOGIN_ENABLED
         value: "false"
+      - key: ORG_NAME
+        value: Montane Packaging
+      # --- Email (SMTP) — set these to enable notifications + weekly report ---
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      - key: NOTIFY_EMAIL_TO
+        sync: false
+      # Secret shared with the GitHub Actions weekly scheduler:
+      - key: REPORT_TOKEN
+        generateValue: true
       # To try the deployed app WITHOUT writing to real Jibble, add:
       #   JIBBLE_DRY_RUN = true

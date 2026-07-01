@@ -28,7 +28,12 @@ export function AdminLog() {
 
   return (
     <section className="card">
-      <h1>Decision log</h1>
+      <div className="admin-header">
+        <h1>Decision log</h1>
+        <a className="btn-secondary btn-inline" href="/api/admin/reports/pay-period.pdf">
+          ⬇ This week's PDF
+        </a>
+      </div>
       <p className="muted">Every approved and denied request, with who decided it and when.</p>
       {error && <p className="error-banner">{error}</p>}
       {!rows && !error && <p className="muted">Loading…</p>}
