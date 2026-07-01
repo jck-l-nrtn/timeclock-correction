@@ -8,8 +8,12 @@
     "apps/*"
   ],
   "scripts": {
+    "build:shared": "npm run build --workspace @timesheet/shared",
+    "predev": "npm run build:shared",
     "dev": "npm run dev --workspace apps/api & npm run dev --workspace apps/web",
+    "predev:api": "npm run build:shared",
     "dev:api": "npm run dev --workspace apps/api",
+    "predev:web": "npm run build:shared",
     "dev:web": "npm run dev --workspace apps/web",
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
