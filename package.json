@@ -11,7 +11,7 @@
     "dev": "npm run dev --workspace apps/api & npm run dev --workspace apps/web",
     "dev:api": "npm run dev --workspace apps/api",
     "dev:web": "npm run dev --workspace apps/web",
-    "build": "npm run build --workspaces --if-present && npm run db:generate --workspace apps/api",
+    "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "db:push": "npm run db:push --workspace apps/api",
     "db:seed": "npm run db:seed --workspace apps/api",
