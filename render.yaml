@@ -1,0 +1,28 @@
+# Render Blueprint — a single Web Service that builds the React app and serves it
+# from the Express API (same origin). Deploy: New → Blueprint, pick this repo.
+services:
+  - type: web
+    name: montane-timeclock
+    runtime: node
+    plan: free
+    healthCheckPath: /api/health
+    buildCommand: npm install --include=dev && npm run build
+    # Sync the DB schema, then start the API (which also serves the web app).
+    startCommand: npm run db:push --workspace apps/api -- --skip-generate && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JIBBLE_CLIENT_ID
+        sync: false # set in the Render dashboard
+      - key: JIBBLE_CLIENT_SECRET
+        sync: false # set in the Render dashboard
+      - key: JIBBLE_ORG_TIMEZONE
+        value: America/Denver
+      - key: SESSION_SECRET
+        generateValue: true # Render generates a strong random value
+      - key: DATABASE_URL
+        sync: false # paste your Neon connection string here
+      - key: DEV_LOGIN_ENABLED
+        value: "false"
+      # To try the deployed app WITHOUT writing to real Jibble, add:
+      #   JIBBLE_DRY_RUN = true
