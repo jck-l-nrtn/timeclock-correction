@@ -33,7 +33,9 @@ export const config = {
     webhookUrl: optional("NOTIFY_WEBHOOK_URL"),
   },
 
-  // Email (SMTP — works with Gmail, SES, Resend, Mailgun, etc.).
+  // Email. Two ways to send:
+  //   1. Gmail via OAuth2 — set GMAIL_USER + GOOGLE_CLIENT_ID/SECRET/REFRESH_TOKEN.
+  //   2. Plain SMTP (SES, Resend, Mailgun, Gmail app password, etc.) — set SMTP_*.
   email: {
     smtpHost: optional("SMTP_HOST"),
     smtpPort: Number(optional("SMTP_PORT", "587")),
@@ -42,6 +44,12 @@ export const config = {
     from: optional("EMAIL_FROM"),
     // Where new-request alerts and the weekly report are sent (the admin/owner).
     notifyTo: optional("NOTIFY_EMAIL_TO"),
+    gmail: {
+      user: optional("GMAIL_USER"),
+      clientId: optional("GOOGLE_CLIENT_ID"),
+      clientSecret: optional("GOOGLE_CLIENT_SECRET"),
+      refreshToken: optional("GOOGLE_REFRESH_TOKEN"),
+    },
   },
 
   // Weekly pay-period report. `token` gates the send endpoint that the scheduler hits.

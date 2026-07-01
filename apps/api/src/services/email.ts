@@ -6,18 +6,34 @@ import { config } from "../config.js";
  * Mailgun, etc. If SMTP isn't configured, calls become console logs so the app
  * still runs (and dev doesn't need a mail server).
  */
-const configured = Boolean(config.email.smtpHost && config.email.smtpUser && config.email.from);
+const g = config.email.gmail;
+const gmailReady = Boolean(g.user && g.clientId && g.clientSecret && g.refreshToken);
+const smtpReady = Boolean(config.email.smtpHost && config.email.smtpUser);
 
-const transport = configured
+// Effective "from": explicit EMAIL_FROM, else the Gmail account.
+const fromAddress = config.email.from || (gmailReady ? g.user : "");
+
+const transport = gmailReady
   ? nodemailer.createTransport({
-      host: config.email.smtpHost,
-      port: config.email.smtpPort,
-      secure: config.email.smtpPort === 465, // 465 = implicit TLS; 587 = STARTTLS
-      auth: { user: config.email.smtpUser, pass: config.email.smtpPass },
+      service: "gmail",
+      auth: {
+        type: "OAuth2",
+        user: g.user,
+        clientId: g.clientId,
+        clientSecret: g.clientSecret,
+        refreshToken: g.refreshToken,
+      },
     })
-  : null;
+  : smtpReady
+    ? nodemailer.createTransport({
+        host: config.email.smtpHost,
+        port: config.email.smtpPort,
+        secure: config.email.smtpPort === 465, // 465 = implicit TLS; 587 = STARTTLS
+        auth: { user: config.email.smtpUser, pass: config.email.smtpPass },
+      })
+    : null;
 
-export const emailConfigured = configured;
+export const emailConfigured = Boolean(transport && fromAddress);
 
 export interface EmailAttachment {
   filename: string;
@@ -33,14 +49,14 @@ export async function sendEmail(opts: {
   attachments?: EmailAttachment[];
 }): Promise<void> {
   const to = opts.to || config.email.notifyTo;
-  if (!transport || !to) {
+  if (!transport || !fromAddress || !to) {
     console.log(
       `[email] not configured — would send "${opts.subject}" to ${to || "(no recipient set)"}`
     );
     return;
   }
   await transport.sendMail({
-    from: config.email.from,
+    from: fromAddress,
     to,
     subject: opts.subject,
     text: opts.text,
