@@ -4,6 +4,9 @@
 
 generator client {
   provider = "prisma-client-js"
+  // Cover local dev (native), Render (debian), and AWS App Runner (rhel/AL) so
+  // the query engine binary is present wherever the app runs.
+  binaryTargets = ["native", "debian-openssl-3.0.x", "rhel-openssl-1.0.x", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
