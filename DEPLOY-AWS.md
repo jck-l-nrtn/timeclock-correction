@@ -1,67 +1,63 @@
-# Deploying to AWS (App Runner + Aurora Serverless v2)
+# Deploying to AWS (serverless: Lambda + DynamoDB + CloudFront)
 
-All-AWS, region **us-east-1**. App Runner builds the app from GitHub and runs it;
-Aurora Serverless v2 (Postgres, scale-to-zero) is the database. Template:
-`aws/cloudformation.yaml`.
+Fully serverless, region **us-east-1**. Architecture:
 
-## Prerequisites
-- AWS CLI configured (`aws configure`) with admin-ish permissions.
-- The repo pushed to GitHub (done).
-
-## 1. Create the App Runner → GitHub connection (one time)
-App Runner needs OAuth access to the repo, which can't be scripted:
-1. AWS Console → **App Runner → GitHub connections → Create connection**.
-2. Authorize GitHub, pick the `timeclock-correction` repo, create it.
-3. Copy the connection **ARN** (looks like `arn:aws:apprunner:us-east-1:<acct>:connection/...`).
-
-## 2. Deploy the stack
-```bash
-aws cloudformation deploy \
-  --region us-east-1 \
-  --stack-name montane-timeclock \
-  --template-file aws/cloudformation.yaml \
-  --parameter-overrides \
-    GitHubConnectionArn="arn:aws:apprunner:us-east-1:...:connection/..." \
-    DBMasterPassword="<a-strong-url-safe-password>" \
-    JibbleClientId="c3d8419d-2cfd-4438-8ee5-2121425feaa8" \
-    JibbleClientSecret="<your-jibble-secret>" \
-    SessionSecret="$(openssl rand -hex 32)" \
-    ResendApiKey="re_...<your-resend-key>" \
-    EmailFrom="onboarding@resend.dev" \
-    NotifyEmailTo="<your-email>" \
-    ReportToken="$(openssl rand -hex 24)"
 ```
-Takes ~10–15 min (Aurora + first App Runner build). When done:
-```bash
-aws cloudformation describe-stacks --region us-east-1 \
-  --stack-name montane-timeclock \
-  --query "Stacks[0].Outputs" --output table
+CloudFront (staff.montanepm.com)
+   ├─ default        → S3 (React static site)
+   └─ /api/*         → Lambda (container image) → DynamoDB
 ```
-Open the **AppUrl** — you should see the Montane Packaging sign-in.
 
-## 3. Custom domain — staff.montanepm.com
-CloudFormation can't associate an App Runner custom domain, so do it after:
-1. App Runner console → your service → **Custom domains → Link domain** →
-   `staff.montanepm.com`.
-2. It shows a set of **CNAME records** (validation + the target). Add them in
-   your DNS (Route 53 or wherever montanepm.com lives).
-3. Wait for it to go **Active** (a few minutes to an hour). `WEB_ORIGIN` is
-   already set to `https://staff.montanepm.com`.
+Everything is provisioned by CloudFormation (`aws/template.yaml`) and deployed by
+a GitHub Actions workflow (`.github/workflows/deploy-aws.yml`) that builds the
+Lambda image, pushes it to ECR, deploys the stack, and publishes the web app.
 
-## 4. Weekly report scheduler
-GitHub → repo **Settings → Secrets and variables → Actions**:
-- `APP_URL` = `https://staff.montanepm.com` (or the App Runner URL)
-- `REPORT_TOKEN` = the same value you passed as the `ReportToken` parameter
+## 1. AWS credentials for CI
+Create an IAM user with permissions to deploy (CloudFormation, Lambda, ECR,
+DynamoDB, S3, CloudFront, IAM). Generate an access key.
 
-The workflow (`.github/workflows/weekly-report.yml`) then runs Mondays. Test it
-now via **Actions → Weekly pay-period report → Run workflow**.
+## 2. GitHub repo secrets
+Settings → Secrets and variables → Actions → add:
+
+| Secret | Value |
+| --- | --- |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | the IAM user's key |
+| `JIBBLE_CLIENT_ID` | `c3d8419d-2cfd-4438-8ee5-2121425feaa8` |
+| `JIBBLE_CLIENT_SECRET` | your Jibble secret |
+| `SESSION_SECRET` | `openssl rand -hex 32` |
+| `RESEND_API_KEY` | your Resend `re_…` key |
+| `EMAIL_FROM` | `onboarding@resend.dev` (or a verified sender) |
+| `NOTIFY_EMAIL_TO` | where alerts + the weekly report go |
+| `REPORT_TOKEN` | `openssl rand -hex 24` |
+| `WEB_ORIGIN` | `https://staff.montanepm.com` |
+
+## 3. Deploy
+GitHub → **Actions → Deploy to AWS → Run workflow** (or push to `main`). It
+builds + pushes the image, deploys the stack, and publishes the site. First run
+takes ~10 min (CloudFront). The workflow prints the **CloudFront URL** at the end.
+
+Open that URL — you should see the Montane Packaging sign-in. Sign in at `/admin`
+with a Jibble Admin email + kiosk PIN, then create employee accounts.
+
+## 4. Custom domain — staff.montanepm.com
+Easiest to add after CloudFront exists:
+1. **ACM (us-east-1)** → request a public cert for `staff.montanepm.com`, validate
+   it by adding the CNAME it shows to your DNS.
+2. CloudFront console → the distribution → **Settings → Edit** → add
+   `staff.montanepm.com` as an **Alternate domain**, pick the ACM cert.
+3. In DNS, add a **CNAME** `staff` → the distribution's `d111....cloudfront.net`.
+
+`WEB_ORIGIN` is already set to `https://staff.montanepm.com`.
+
+## 5. Weekly report scheduler
+`.github/workflows/weekly-report.yml` runs Mondays. Add repo secrets:
+- `APP_URL` = `https://staff.montanepm.com`
+- `REPORT_TOKEN` = same value as the deploy `REPORT_TOKEN`
 
 ## Notes
-- **Scale-to-zero:** Aurora pauses when idle (min 0 ACU) — the first request
-  after a quiet spell waits ~15s while it wakes. Keeps cost near zero when unused.
-- **Database exposure:** Aurora is reachable over the internet but only with SSL
-  + the master password (same model as Neon/Supabase). To make it fully private
-  instead, we'd add an App Runner VPC connector + NAT Gateway (~$32/mo more).
-- **Updates:** `AutoDeploymentsEnabled` is on — pushing to `main` triggers a new
-  App Runner build automatically.
-- **Runtime:** App Runner managed Node 18. The app is compatible.
+- **Cost:** Lambda + DynamoDB on-demand + CloudFront/S3 are effectively **$0/mo**
+  at this volume (within free limits). No idle cost.
+- **Data model:** single DynamoDB table `Timeclock` with 4 GSIs (see
+  `apps/api/src/db/data.ts`). Magic-link tokens auto-expire via TTL.
+- **Local tests:** `tsx apps/api/scripts/dynamo-test.ts` and `http-test.ts` run
+  the data layer / full app against in-process dynalite (no AWS needed).

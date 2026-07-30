@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { Request, Response, NextFunction } from "express";
 import { config, isProd } from "../config.js";
-import { prisma } from "../db/client.js";
+import { getAdminByEmail } from "../db/data.js";
 
 /**
  * Admin session handling — a stateless, HMAC-signed httpOnly cookie carrying the
@@ -21,10 +21,10 @@ function sign(payload: string): string {
   return createHmac("sha256", config.auth.sessionSecret).update(payload).digest("base64url");
 }
 
-/** Mint a session cookie for an admin id. */
-export function issueSession(res: Response, adminId: string): void {
+/** Mint a session cookie for an admin (keyed by email). */
+export function issueSession(res: Response, adminEmail: string): void {
   const payload = Buffer.from(
-    JSON.stringify({ adminId, exp: Date.now() + SESSION_TTL_MS })
+    JSON.stringify({ email: adminEmail, exp: Date.now() + SESSION_TTL_MS })
   ).toString("base64url");
   const token = `${payload}.${sign(payload)}`;
   res.cookie(COOKIE_NAME, token, {
@@ -40,8 +40,8 @@ export function clearSession(res: Response): void {
   res.clearCookie(COOKIE_NAME, { path: "/" });
 }
 
-/** Verify the session cookie and return the admin id, or null. */
-export function readAdminId(req: Request): string | null {
+/** Verify the session cookie and return the admin email, or null. */
+export function readAdminEmail(req: Request): string | null {
   const token: unknown = req.cookies?.[COOKIE_NAME];
   if (typeof token !== "string") return null;
   const [payload, sig] = token.split(".");
@@ -54,12 +54,12 @@ export function readAdminId(req: Request): string | null {
 
   try {
     const data = JSON.parse(Buffer.from(payload, "base64url").toString()) as {
-      adminId?: unknown;
+      email?: unknown;
       exp?: unknown;
     };
-    if (typeof data.adminId !== "string" || typeof data.exp !== "number") return null;
+    if (typeof data.email !== "string" || typeof data.exp !== "number") return null;
     if (data.exp < Date.now()) return null;
-    return data.adminId;
+    return data.email;
   } catch {
     return null;
   }
@@ -67,12 +67,12 @@ export function readAdminId(req: Request): string | null {
 
 /** Express middleware: require a valid admin session, else 401. */
 export async function requireAdmin(req: Request, res: Response, next: NextFunction): Promise<void> {
-  const adminId = readAdminId(req);
-  if (!adminId) {
+  const email = readAdminEmail(req);
+  if (!email) {
     res.status(401).json({ error: "unauthenticated" });
     return;
   }
-  const admin = await prisma.admin.findUnique({ where: { id: adminId } });
+  const admin = await getAdminByEmail(email);
   if (!admin) {
     res.status(401).json({ error: "unauthenticated" });
     return;

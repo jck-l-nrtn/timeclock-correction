@@ -1,18 +1,14 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { Request, Response } from "express";
 import { config, isProd } from "../config.js";
-import { prisma } from "../db/client.js";
+import { getEmployeeByEmail } from "../db/data.js";
 import { resolveEmailFromToken } from "./magicLink.js";
 
 /**
- * Employee session — an HMAC-signed httpOnly cookie carrying the employee id.
- * Mirrors the admin session but is a separate cookie/identity.
- *
- * `resolveEmployee` unifies the two ways an employee can be identified:
- *   1. a logged-in employee session (primary), or
- *   2. a magic-link token in the query/body (fallback, kept during transition).
+ * Employee session — an HMAC-signed httpOnly cookie carrying the employee email.
+ * `resolveEmployee` unifies the two ways an employee is identified: a logged-in
+ * session, or a magic-link token in the query/body (fallback).
  */
-
 const COOKIE_NAME = "employee_session";
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000; // 12 hours
 
@@ -20,9 +16,9 @@ function sign(payload: string): string {
   return createHmac("sha256", config.auth.sessionSecret).update(payload).digest("base64url");
 }
 
-export function issueEmployeeSession(res: Response, employeeId: string): void {
+export function issueEmployeeSession(res: Response, email: string): void {
   const payload = Buffer.from(
-    JSON.stringify({ employeeId, exp: Date.now() + SESSION_TTL_MS })
+    JSON.stringify({ email, exp: Date.now() + SESSION_TTL_MS })
   ).toString("base64url");
   res.cookie(COOKIE_NAME, `${payload}.${sign(payload)}`, {
     httpOnly: true,
@@ -37,7 +33,7 @@ export function clearEmployeeSession(res: Response): void {
   res.clearCookie(COOKIE_NAME, { path: "/" });
 }
 
-export function readEmployeeId(req: Request): string | null {
+export function readEmployeeEmail(req: Request): string | null {
   const token: unknown = req.cookies?.[COOKIE_NAME];
   if (typeof token !== "string") return null;
   const [payload, sig] = token.split(".");
@@ -47,12 +43,12 @@ export function readEmployeeId(req: Request): string | null {
   if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
   try {
     const data = JSON.parse(Buffer.from(payload, "base64url").toString()) as {
-      employeeId?: unknown;
+      email?: unknown;
       exp?: unknown;
     };
-    if (typeof data.employeeId !== "string" || typeof data.exp !== "number") return null;
+    if (typeof data.email !== "string" || typeof data.exp !== "number") return null;
     if (data.exp < Date.now()) return null;
-    return data.employeeId;
+    return data.email;
   } catch {
     return null;
   }
@@ -66,9 +62,9 @@ export interface ResolvedEmployee {
 
 /** Identify the acting employee from a session, or a magic-link token fallback. */
 export async function resolveEmployee(req: Request): Promise<ResolvedEmployee | null> {
-  const id = readEmployeeId(req);
-  if (id) {
-    const e = await prisma.employee.findUnique({ where: { id } });
+  const sessionEmail = readEmployeeEmail(req);
+  if (sessionEmail) {
+    const e = await getEmployeeByEmail(sessionEmail);
     if (e) return { email: e.email, fullName: e.fullName, jibblePersonId: e.jibblePersonId };
   }
   // Fallback: magic-link token (query for GETs, body for POSTs).

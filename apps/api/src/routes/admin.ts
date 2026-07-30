@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { AdminDecisionSchema, RequestStatus } from "@timesheet/shared";
-import { prisma } from "../db/client.js";
+import * as data from "../db/data.js";
 import { requireAdmin } from "../services/adminAuth.js";
 import { jibbleClient } from "../services/jibbleClient.js";
 import { buildDigitalRecord } from "../services/digitalRecord.js";
@@ -15,33 +15,33 @@ export const adminRouter = Router();
 // Every admin route requires a valid admin session.
 adminRouter.use(requireAdmin);
 
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
 // ---- Employee account management -----------------------------------------
 
 /** GET /api/admin/jibble-people — org people for the account-creation picker. */
 adminRouter.get("/jibble-people", async (_req, res) => {
-  const people = await jibbleClient.listPeople();
-  return res.json(people);
+  return res.json(await jibbleClient.listPeople());
 });
 
 /** GET /api/admin/employees — app accounts that have been created. */
 adminRouter.get("/employees", async (_req, res) => {
-  const rows = await prisma.employee.findMany({ orderBy: { fullName: "asc" } });
+  const rows = await data.listEmployees();
   return res.json(
     rows.map((e) => ({
       id: e.id,
       email: e.email,
       fullName: e.fullName,
       jibblePersonId: e.jibblePersonId,
-      createdAt: e.createdAt.toISOString(),
+      createdAt: e.createdAt,
     }))
   );
 });
 
 /**
  * POST /api/admin/employees { jibblePersonId, password? }
- * Create an employee login for a chosen Jibble person. Username is their email;
- * the default password is their Jibble kiosk PIN (or an explicit override). The
- * account must change the password on first sign-in, and we "send" the details.
+ * Create an employee login for a Jibble person. Username = email; default
+ * password = their Jibble kiosk PIN (or an explicit override).
  */
 adminRouter.post("/employees", async (req, res) => {
   const jibblePersonId = typeof req.body?.jibblePersonId === "string" ? req.body.jibblePersonId : "";
@@ -53,22 +53,18 @@ adminRouter.post("/employees", async (req, res) => {
   if (!person.email) return res.status(400).json({ error: "person_has_no_email" });
 
   const email = person.email.toLowerCase();
-  if (await prisma.employee.findUnique({ where: { email } })) {
-    return res.status(409).json({ error: "account_exists" });
-  }
+  if (await data.getEmployeeByEmail(email)) return res.status(409).json({ error: "account_exists" });
 
   const tempPassword = override || person.pinCode || "";
   if (!tempPassword) {
     return res.status(400).json({ error: "no_default_password", detail: "This person has no kiosk PIN; provide a password." });
   }
 
-  const emp = await prisma.employee.create({
-    data: {
-      email,
-      fullName: person.fullName,
-      jibblePersonId: person.id,
-      passwordHash: hashPassword(tempPassword),
-    },
+  const emp = await data.createEmployee({
+    email,
+    fullName: person.fullName,
+    passwordHash: hashPassword(tempPassword),
+    jibblePersonId: person.id,
   });
 
   notifier
@@ -81,33 +77,15 @@ adminRouter.post("/employees", async (req, res) => {
       email: emp.email,
       fullName: emp.fullName,
       jibblePersonId: emp.jibblePersonId,
-      createdAt: emp.createdAt.toISOString(),
+      createdAt: emp.createdAt,
     },
-    // Returned so the admin can read the password (kiosk PIN) to the employee.
     tempPassword,
   });
 });
 
-/**
- * GET /api/admin/requests?status=pending
- * Review queue. Defaults to newest-last (FIFO) so the oldest pending request
- * is actioned first. Omit `status` to see everything.
- */
-adminRouter.get("/requests", async (req, res) => {
-  const status = typeof req.query.status === "string" ? req.query.status : undefined;
-  const rows = await prisma.correctionRequest.findMany({
-    where: status ? { status } : undefined,
-    orderBy: { createdAt: "asc" },
-  });
-  return res.json(rows.map(toCorrectionRequestDTO));
-});
+// ---- Pay-period report ----------------------------------------------------
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-
-/**
- * GET /api/admin/reports/pay-period.pdf[?from&to]
- * Download the pay-period sign-off PDF on demand (defaults to the last 7 days).
- */
+/** GET /api/admin/reports/pay-period.pdf[?from&to] */
 adminRouter.get("/reports/pay-period.pdf", async (req, res) => {
   const def = defaultWeekRange();
   const from = typeof req.query.from === "string" && DATE_RE.test(req.query.from) ? req.query.from : def.from;
@@ -118,25 +96,25 @@ adminRouter.get("/reports/pay-period.pdf", async (req, res) => {
   return res.send(buffer);
 });
 
-/**
- * GET /api/admin/log
- * Audit log of every decided request (approved / denied / applied / failed),
- * newest first, with the deciding admin's name and the per-entry record.
- */
+// ---- Review queue + decision log ------------------------------------------
+
+/** GET /api/admin/requests?status=pending — review queue for a status. */
+adminRouter.get("/requests", async (req, res) => {
+  const status = typeof req.query.status === "string" ? req.query.status : RequestStatus.Pending;
+  const rows = await data.listRequestsByStatus(status);
+  return res.json(rows.map(toCorrectionRequestDTO));
+});
+
+/** GET /api/admin/log — every decided request, newest first. */
 adminRouter.get("/log", async (_req, res) => {
-  const rows = await prisma.correctionRequest.findMany({
-    where: { status: { not: RequestStatus.Pending } },
-    orderBy: { decidedAt: "desc" },
-    include: { decidedByAdmin: true },
-  });
+  const rows = await data.listDecided();
   return res.json(rows.map(toCorrectionRequestDTO));
 });
 
 /**
  * POST /api/admin/requests/:id/decision
- * Approve or deny a pending request. On approval we hand off to the Jibble
- * adapter, which either writes the entry (status -> applied) or returns a
- * manual instruction (status stays approved with the instruction recorded).
+ * Approve or deny a pending request. On approval, hand off to the Jibble adapter
+ * (write / manual / failure), stamp the digital record, and notify.
  */
 adminRouter.post("/requests/:id/decision", async (req, res) => {
   const parsed = AdminDecisionSchema.safeParse(req.body);
@@ -148,57 +126,41 @@ adminRouter.post("/requests/:id/decision", async (req, res) => {
   }
   const { decision, note } = parsed.data;
 
-  const existing = await prisma.correctionRequest.findUnique({ where: { id: req.params.id } });
-  if (!existing) return res.status(404).json({ error: "not_found" });
-  if (existing.status !== RequestStatus.Pending) {
-    return res.status(409).json({ error: "already_decided", status: existing.status });
+  const row = await data.getRequestById(req.params.id);
+  if (!row) return res.status(404).json({ error: "not_found" });
+  if (row.status !== RequestStatus.Pending) {
+    return res.status(409).json({ error: "already_decided", status: row.status });
   }
 
-  const decidedBy = { decidedByAdminId: req.admin!.id, decidedAt: new Date(), decisionNote: note ?? null };
+  const admin = req.admin!;
+  row.decisionNote = note ?? null;
+  row.decidedByAdminId = admin.id;
+  row.decidedByName = admin.name;
+  row.decidedAt = new Date().toISOString();
 
-  let row = await prisma.correctionRequest.update({
-    where: { id: existing.id },
-    data: { status: decision === RequestStatus.Denied ? RequestStatus.Denied : RequestStatus.Approved, ...decidedBy },
-    include: { decidedByAdmin: true },
-  });
-
-  // On approval, hand off to the Jibble adapter (write / manual / failure). The
-  // DTO carries decidedBy/decidedAt so the adapter can stamp the Jibble note.
-  if (decision === RequestStatus.Approved) {
+  if (decision === RequestStatus.Denied) {
+    row.status = RequestStatus.Denied;
+  } else {
+    row.status = RequestStatus.Approved;
     try {
+      // The DTO carries decidedBy/decidedAt so the adapter can stamp the note.
       const result = await jibbleClient.applyCorrection(toCorrectionRequestDTO(row));
       if (result.kind === "applied") {
-        row = await prisma.correctionRequest.update({
-          where: { id: row.id },
-          data: { status: RequestStatus.Applied, jibbleResult: `Jibble entry ${result.jibbleEntryId}` },
-          include: { decidedByAdmin: true },
-        });
+        row.status = RequestStatus.Applied;
+        row.jibbleResult = `Jibble entry ${result.jibbleEntryId}`;
       } else {
-        // Manual fallback: approved, but an admin must apply it in Jibble by hand.
-        row = await prisma.correctionRequest.update({
-          where: { id: row.id },
-          data: { jibbleResult: result.instruction },
-          include: { decidedByAdmin: true },
-        });
+        row.jibbleResult = result.instruction;
       }
     } catch (err) {
-      row = await prisma.correctionRequest.update({
-        where: { id: row.id },
-        data: { status: RequestStatus.Failed, jibbleResult: `Jibble write failed: ${String(err)}` },
-        include: { decidedByAdmin: true },
-      });
+      row.status = RequestStatus.Failed;
+      row.jibbleResult = `Jibble write failed: ${String(err)}`;
     }
   }
 
-  // Stamp the immutable digital record from the settled row, then notify.
-  const record = buildDigitalRecord(row, req.admin!.name);
-  const finalRow = await prisma.correctionRequest.update({
-    where: { id: row.id },
-    data: { digitalRecord: JSON.stringify(record) },
-    include: { decidedByAdmin: true },
-  });
+  row.digitalRecord = JSON.stringify(buildDigitalRecord(row, admin.name));
+  const saved = await data.putRequest(row);
 
-  const dto = toCorrectionRequestDTO(finalRow);
+  const dto = toCorrectionRequestDTO(saved);
   notifier.requestDecided(dto).catch((e) => console.error("[admin] notify failed:", e));
   return res.json(dto);
 });

@@ -59,6 +59,13 @@ export const config = {
 
   orgName: optional("ORG_NAME", "Montane Packaging"),
 
+  // DynamoDB (single table). DYNAMO_ENDPOINT is set only for local testing (dynalite).
+  aws: {
+    region: optional("AWS_REGION", "us-east-1"),
+    tableName: optional("TABLE_NAME", "Timeclock"),
+    dynamoEndpoint: optional("DYNAMO_ENDPOINT"),
+  },
+
   // Admin auth (Phase 4). Dev fallback lets the skeleton run without Jibble SSO.
   auth: {
     devLoginEnabled: optional("DEV_LOGIN_ENABLED", "true") === "true",

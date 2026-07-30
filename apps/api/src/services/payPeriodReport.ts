@@ -1,6 +1,5 @@
 import PDFDocument from "pdfkit";
-import type { CorrectionRequest } from "@prisma/client";
-import { prisma } from "../db/client.js";
+import { listChangesInRange, type RequestItem } from "../db/data.js";
 import { config } from "../config.js";
 
 const EVENT_LABEL: Record<string, string> = {
@@ -8,8 +7,6 @@ const EVENT_LABEL: Record<string, string> = {
   out: "Missed clock-out",
   adjust: "Time adjustment",
 };
-
-type Row = CorrectionRequest & { decidedByAdmin?: { name: string } | null };
 
 /** The last 7 days (default weekly pay period), as YYYY-MM-DD. */
 export function defaultWeekRange(): { from: string; to: string } {
@@ -27,14 +24,16 @@ export async function buildPayPeriodPdf(
   from: string,
   to: string
 ): Promise<{ buffer: Buffer; count: number }> {
-  const rows: Row[] = await prisma.correctionRequest.findMany({
-    where: { status: { in: ["approved", "applied"] }, date: { gte: from, lte: to } },
-    orderBy: [{ employeeName: "asc" }, { date: "asc" }, { intendedTime: "asc" }],
-    include: { decidedByAdmin: true },
-  });
+  const rows: RequestItem[] = await listChangesInRange(from, to);
+  rows.sort(
+    (a, b) =>
+      a.employeeName.localeCompare(b.employeeName) ||
+      a.date.localeCompare(b.date) ||
+      a.intendedTime.localeCompare(b.intendedTime)
+  );
 
   // Group by employee.
-  const byEmployee = new Map<string, Row[]>();
+  const byEmployee = new Map<string, RequestItem[]>();
   for (const r of rows) {
     const list = byEmployee.get(r.employeeName) ?? [];
     list.push(r);
@@ -67,7 +66,7 @@ export async function buildPayPeriodPdf(
     for (const r of list) {
       ensureSpace(doc, 46);
       const label = EVENT_LABEL[r.eventType] ?? r.eventType;
-      const approver = r.decidedByAdmin?.name ?? "—";
+      const approver = r.decidedByName ?? "—";
       const when = r.decidedAt ? new Date(r.decidedAt).toLocaleDateString() : "";
       doc.font("Helvetica-Bold").text(`• ${label} — ${r.date} at ${r.intendedTime}`);
       doc.font("Helvetica").fillColor("#444");

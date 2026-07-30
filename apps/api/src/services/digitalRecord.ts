@@ -1,12 +1,11 @@
-import type { CorrectionRequest } from "@prisma/client";
 import type { DigitalRecord, EventType } from "@timesheet/shared";
+import type { RequestItem } from "../db/data.js";
 
 /**
- * Build the immutable record of a decided request — a snapshot of exactly what
- * change was requested, who decided it, and what happened in Jibble. Stored as
- * JSON on the request; the employee acknowledges it with a digital signature.
+ * Build the immutable record of a decided request — a snapshot of the change,
+ * who decided it, and the Jibble outcome. Stored as JSON on the request.
  */
-export function buildDigitalRecord(row: CorrectionRequest, adminName: string): DigitalRecord {
+export function buildDigitalRecord(row: RequestItem, adminName: string): DigitalRecord {
   return {
     requestId: row.id,
     generatedAt: new Date().toISOString(),
@@ -23,7 +22,7 @@ export function buildDigitalRecord(row: CorrectionRequest, adminName: string): D
     affirmation: { affirmed: row.affirmed },
     decision: row.status === "denied" ? "denied" : "approved",
     decidedBy: adminName,
-    decidedAt: (row.decidedAt ?? new Date()).toISOString(),
+    decidedAt: row.decidedAt ?? new Date().toISOString(),
     jibbleOutcome: row.jibbleResult ?? (row.status === "denied" ? "Denied by admin" : "Approved"),
   };
 }

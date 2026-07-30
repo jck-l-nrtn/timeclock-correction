@@ -1,0 +1,221 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Montane Packaging Timeclock — serverless. DynamoDB (single table) + Lambda
+  (container image) behind CloudFront, which serves the React app from S3 and
+  routes /api/* to the function (same origin, so cookies work).
+
+Parameters:
+  ImageUri:
+    Type: String
+    Description: ECR image URI for the Lambda (built + pushed by the deploy workflow).
+  WebOrigin:
+    Type: String
+    Default: https://staff.montanepm.com
+    Description: Public URL (for magic-link URLs). Set to the final domain.
+  JibbleClientId: { Type: String }
+  JibbleClientSecret: { Type: String, NoEcho: true }
+  SessionSecret: { Type: String, NoEcho: true }
+  ResendApiKey: { Type: String, NoEcho: true }
+  EmailFrom: { Type: String, Default: onboarding@resend.dev }
+  NotifyEmailTo: { Type: String }
+  ReportToken: { Type: String, NoEcho: true }
+
+Resources:
+  # ---- DynamoDB single table --------------------------------------------
+  Table:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - { AttributeName: PK, AttributeType: S }
+        - { AttributeName: SK, AttributeType: S }
+        - { AttributeName: GSI1PK, AttributeType: S }
+        - { AttributeName: GSI1SK, AttributeType: S }
+        - { AttributeName: GSI2PK, AttributeType: S }
+        - { AttributeName: GSI2SK, AttributeType: S }
+        - { AttributeName: GSI3PK, AttributeType: S }
+        - { AttributeName: GSI3SK, AttributeType: S }
+        - { AttributeName: GSI4PK, AttributeType: S }
+        - { AttributeName: GSI4SK, AttributeType: S }
+      KeySchema:
+        - { AttributeName: PK, KeyType: HASH }
+        - { AttributeName: SK, KeyType: RANGE }
+      GlobalSecondaryIndexes:
+        - IndexName: GSI1
+          KeySchema: [{ AttributeName: GSI1PK, KeyType: HASH }, { AttributeName: GSI1SK, KeyType: RANGE }]
+          Projection: { ProjectionType: ALL }
+        - IndexName: GSI2
+          KeySchema: [{ AttributeName: GSI2PK, KeyType: HASH }, { AttributeName: GSI2SK, KeyType: RANGE }]
+          Projection: { ProjectionType: ALL }
+        - IndexName: GSI3
+          KeySchema: [{ AttributeName: GSI3PK, KeyType: HASH }, { AttributeName: GSI3SK, KeyType: RANGE }]
+          Projection: { ProjectionType: ALL }
+        - IndexName: GSI4
+          KeySchema: [{ AttributeName: GSI4PK, KeyType: HASH }, { AttributeName: GSI4SK, KeyType: RANGE }]
+          Projection: { ProjectionType: ALL }
+      TimeToLiveSpecification: { AttributeName: expiresEpoch, Enabled: true }
+
+  # ---- Lambda ------------------------------------------------------------
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: dynamo
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                Resource:
+                  - !GetAtt Table.Arn
+                  - !Sub "${Table.Arn}/index/*"
+
+  Fn:
+    Type: AWS::Lambda::Function
+    Properties:
+      PackageType: Image
+      Code: { ImageUri: !Ref ImageUri }
+      Role: !GetAtt LambdaRole.Arn
+      MemorySize: 512
+      Timeout: 30
+      Architectures: [x86_64]
+      Environment:
+        Variables:
+          NODE_ENV: production
+          TABLE_NAME: !Ref Table
+          WEB_ORIGIN: !Ref WebOrigin
+          ORG_NAME: Montane Packaging
+          JIBBLE_ORG_TIMEZONE: America/Denver
+          DEV_LOGIN_ENABLED: "false"
+          JIBBLE_CLIENT_ID: !Ref JibbleClientId
+          JIBBLE_CLIENT_SECRET: !Ref JibbleClientSecret
+          SESSION_SECRET: !Ref SessionSecret
+          SMTP_HOST: smtp.resend.com
+          SMTP_PORT: "587"
+          SMTP_USER: resend
+          SMTP_PASS: !Ref ResendApiKey
+          EMAIL_FROM: !Ref EmailFrom
+          NOTIFY_EMAIL_TO: !Ref NotifyEmailTo
+          REPORT_TOKEN: !Ref ReportToken
+
+  FnUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn: !Ref Fn
+      AuthType: NONE
+      InvokeMode: BUFFERED
+  FnUrlPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref Fn
+      Action: lambda:InvokeFunctionUrl
+      Principal: "*"
+      FunctionUrlAuthType: NONE
+
+  # ---- Static site bucket ------------------------------------------------
+  WebBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  WebBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref WebBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: cloudfront.amazonaws.com }
+            Action: s3:GetObject
+            Resource: !Sub "${WebBucket.Arn}/*"
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${Distribution}"
+
+  # ---- CloudFront --------------------------------------------------------
+  Oac:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub "${AWS::StackName}-oac"
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  SpaFunction:
+    Type: AWS::CloudFront::Function
+    Properties:
+      Name: !Sub "${AWS::StackName}-spa"
+      AutoPublish: true
+      FunctionConfig: { Comment: SPA rewrite, Runtime: cloudfront-js-2.0 }
+      FunctionCode: |
+        function handler(event) {
+          var req = event.request;
+          var uri = req.uri;
+          if (uri.startsWith('/api/')) return req;
+          if (uri.endsWith('/')) { req.uri = '/index.html'; return req; }
+          var last = uri.split('/').pop();
+          if (last.indexOf('.') === -1) { req.uri = '/index.html'; }
+          return req;
+        }
+
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        DefaultRootObject: index.html
+        PriceClass: PriceClass_100
+        Origins:
+          - Id: s3
+            DomainName: !GetAtt WebBucket.RegionalDomainName
+            OriginAccessControlId: !Ref Oac
+            S3OriginConfig: { OriginAccessIdentity: "" }
+          - Id: lambda
+            DomainName: !Select [2, !Split ["/", !GetAtt FnUrl.FunctionUrl]]
+            CustomOriginConfig:
+              OriginProtocolPolicy: https-only
+              OriginSSLProtocols: [TLSv1.2]
+        DefaultCacheBehavior:
+          TargetOriginId: s3
+          ViewerProtocolPolicy: redirect-to-https
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6 # CachingOptimized
+          FunctionAssociations:
+            - EventType: viewer-request
+              FunctionARN: !GetAtt SpaFunction.FunctionMetadata.FunctionARN
+        CacheBehaviors:
+          - PathPattern: /api/*
+            TargetOriginId: lambda
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad # CachingDisabled
+            OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac # AllViewerExceptHostHeader
+
+Outputs:
+  CloudFrontUrl:
+    Value: !Sub "https://${Distribution.DomainName}"
+  WebBucketName:
+    Value: !Ref WebBucket
+  DistributionId:
+    Value: !Ref Distribution
+  TableName:
+    Value: !Ref Table

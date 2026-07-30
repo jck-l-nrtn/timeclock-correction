@@ -17,8 +17,6 @@
     "dev:web": "npm run dev --workspace apps/web",
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "db:push": "npm run db:push --workspace apps/api",
-    "db:seed": "npm run db:seed --workspace apps/api",
     "start": "node apps/api/dist/index.js"
   },
   "engines": {
