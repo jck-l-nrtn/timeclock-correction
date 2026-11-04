@@ -117,27 +117,29 @@ function AdminLogin({ onLogin }: { onLogin: (s: AdminSession) => void }) {
   );
 }
 
+const NAV: { id: "queue" | "log" | "org" | "users"; label: string }[] = [
+  { id: "queue", label: "Review" },
+  { id: "log", label: "Decision log" },
+  { id: "org", label: "Org chart" },
+  { id: "users", label: "Add people" },
+];
+
 function AdminShell({ session, onSignOut }: { session: AdminSession; onSignOut: () => void }) {
   const [tab, setTab] = useState<"queue" | "log" | "org" | "users">("queue");
+  const initials = (session.name || "A").split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
   return (
-    <div>
-      <div className="dashboard-head">
-        <div className="tabs">
-          <button className={tab === "queue" ? "tab tab-active" : "tab"} onClick={() => setTab("queue")}>
-            Review queue
-          </button>
-          <button className={tab === "log" ? "tab tab-active" : "tab"} onClick={() => setTab("log")}>
-            Decision log
-          </button>
-          <button className={tab === "org" ? "tab tab-active" : "tab"} onClick={() => setTab("org")}>
-            Org chart
-          </button>
-          <button className={tab === "users" ? "tab tab-active" : "tab"} onClick={() => setTab("users")}>
-            Add people
-          </button>
+    <div className="admin-shell">
+      <header className="admin-top">
+        <div className="admin-brand">
+          <span className="admin-mark" />
+          <div>
+            <div className="admin-title">Admin Console</div>
+            <div className="muted admin-sub">Montane Packaging</div>
+          </div>
         </div>
         <div className="admin-user">
-          <span className="muted">{session.name}</span>
+          <span className="admin-avatar" title={session.name}>{initials}</span>
+          <span className="muted admin-name">{session.name}</span>
           <button
             className="btn-secondary btn-inline"
             onClick={async () => {
@@ -148,7 +150,16 @@ function AdminShell({ session, onSignOut }: { session: AdminSession; onSignOut: 
             Sign out
           </button>
         </div>
-      </div>
+      </header>
+
+      <nav className="admin-nav seg-control">
+        {NAV.map((n) => (
+          <button key={n.id} className={tab === n.id ? "seg seg-on" : "seg"} onClick={() => setTab(n.id)}>
+            {n.label}
+          </button>
+        ))}
+      </nav>
+
       {tab === "queue" && <AdminQueue />}
       {tab === "log" && <AdminLog />}
       {tab === "org" && <OrgPeople />}
@@ -185,32 +196,52 @@ function AdminQueue() {
     }
   }
 
+  const corrections = queue?.filter((r) => r.kind !== "timeoff").length ?? 0;
+  const timeoff = queue?.filter((r) => r.kind === "timeoff").length ?? 0;
+
   return (
-    <section className="card">
-      <div className="cal-head">
-        <h1>Review queue</h1>
-        <div className="seg-control seg-sm">
-          <button className={mode === "calendar" ? "seg seg-on" : "seg"} onClick={() => setMode("calendar")}>Calendar</button>
-          <button className={mode === "list" ? "seg seg-on" : "seg"} onClick={() => setMode("list")}>List</button>
+    <div>
+      <div className="stat-cards admin-stats">
+        <div className="stat-card stat-primary">
+          <div className="stat-big">{queue?.length ?? "—"}</div>
+          <div className="stat-cap">pending requests</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-big">{corrections}</div>
+          <div className="stat-cap">timeclock corrections</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-big">{timeoff}</div>
+          <div className="stat-cap">time-off requests</div>
         </div>
       </div>
 
-      {flash && <p className="flash">{flash}</p>}
-      {error && <p className="error-banner">{error}</p>}
+      <section className="card">
+        <div className="cal-head">
+          <h1>Review queue</h1>
+          <div className="seg-control seg-sm" style={{ margin: 0 }}>
+            <button className={mode === "calendar" ? "seg seg-on" : "seg"} onClick={() => setMode("calendar")}>Calendar</button>
+            <button className={mode === "list" ? "seg seg-on" : "seg"} onClick={() => setMode("list")}>List</button>
+          </div>
+        </div>
 
-      {!queue && <p className="muted">Loading…</p>}
-      {queue && queue.length === 0 && <p className="muted">No pending requests. 🎉</p>}
+        {flash && <p className="flash">{flash}</p>}
+        {error && <p className="error-banner">{error}</p>}
 
-      {queue && queue.length > 0 && mode === "list" && (
-        <ul className="request-list">
-          {queue.map((r) => (
-            <QueueItem key={r.id} request={r} onDecide={decide} />
-          ))}
-        </ul>
-      )}
-      {queue && queue.length > 0 && mode === "calendar" && (
-        <AdminRequestsCalendar requests={queue} onDecide={decide} />
-      )}
-    </section>
+        {!queue && <p className="muted">Loading…</p>}
+        {queue && queue.length === 0 && <p className="muted">No pending requests. 🎉</p>}
+
+        {queue && queue.length > 0 && mode === "list" && (
+          <ul className="request-list">
+            {queue.map((r) => (
+              <QueueItem key={r.id} request={r} onDecide={decide} />
+            ))}
+          </ul>
+        )}
+        {queue && queue.length > 0 && mode === "calendar" && (
+          <AdminRequestsCalendar requests={queue} onDecide={decide} />
+        )}
+      </section>
+    </div>
   );
 }

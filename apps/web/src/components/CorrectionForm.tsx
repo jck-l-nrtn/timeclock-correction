@@ -29,6 +29,8 @@ interface CorrectionFormProps {
   lockDate?: boolean;
   /** Hide the clock-in/out/adjust selector (the caller already chose). */
   lockEventType?: boolean;
+  /** The existing punch being edited — shown so the employee sees what they're changing. */
+  original?: { type: string; date: string; time: string };
   heading?: string;
   subheading?: string;
   /** If provided, called on success (parent handles the "done" state). Otherwise
@@ -58,6 +60,7 @@ export function CorrectionForm({
   hideIdentity,
   lockDate,
   lockEventType,
+  original,
   heading = "Report a missed timeclock",
   subheading = "Forgot to clock in or out, or need a time corrected? Fill this out and an admin will review it.",
   onSubmitted,
@@ -148,8 +151,26 @@ export function CorrectionForm({
     <div className="card">
       <h1>{heading}</h1>
       <p className="muted">{subheading}</p>
-      {isEdit && (
-        <p className="pill">Editing an existing entry — approval will replace it with the corrected time.</p>
+      {original && (
+        <div className="orig-punch">
+          <span className="orig-label">You're editing</span>
+          <div className="orig-detail">
+            <span className={`punch-pill punch-${original.type.toLowerCase()}`}>
+              {original.type === "In" ? "Clock in" : "Clock out"}
+            </span>
+            <span className="orig-when">
+              {new Date(original.date + "T00:00:00").toLocaleDateString(undefined, {
+                weekday: "short",
+                month: "short",
+                day: "numeric",
+              })}{" "}
+              at <strong>{original.time}</strong>
+            </span>
+          </div>
+        </div>
+      )}
+      {isEdit && !original && (
+        <p className="pill">Editing an existing entry — approval replaces it with the corrected time.</p>
       )}
 
       <form onSubmit={handleSubmit} noValidate>

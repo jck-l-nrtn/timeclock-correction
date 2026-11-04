@@ -1024,3 +1024,41 @@ code {
   .pp-seg { font-size: 0.64rem; }
   .pp-num { font-size: 0.85rem; }
 }
+
+/* ===== "You're editing" original punch banner ===== */
+.orig-punch { background: var(--accent-tint); border: 1px solid var(--border); border-radius: 12px; padding: 0.7rem 0.9rem; margin: 0.25rem 0 1rem; }
+.orig-label { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--accent-strong); }
+.orig-detail { display: flex; align-items: center; gap: 0.6rem; margin-top: 0.4rem; }
+.orig-when { font-size: 1rem; }
+.orig-when strong { font-family: "Archivo", sans-serif; }
+
+/* ===== Admin console shell ===== */
+.admin-shell { max-width: 940px; }
+.admin-top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.admin-brand { display: flex; align-items: center; gap: 0.7rem; }
+.admin-mark { width: 6px; height: 38px; border-radius: 3px; background: linear-gradient(var(--accent), var(--accent-strong)); flex: none; }
+.admin-title { font-family: "Archivo", sans-serif; font-weight: 800; font-size: 1.35rem; color: var(--text); line-height: 1.1; }
+.admin-sub { font-size: 0.82rem; }
+.admin-user { display: flex; align-items: center; gap: 0.6rem; }
+.admin-avatar { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 50%; background: var(--accent-strong); color: #fff; font-weight: 700; font-size: 0.82rem; flex: none; }
+.admin-nav { display: flex; width: 100%; overflow-x: auto; }
+.admin-nav .seg { white-space: nowrap; }
+.admin-stats { margin-top: 0; }
+@media (max-width: 560px) { .admin-name { display: none; } }
+
+/* ===== Review cards ===== */
+.review-card { list-style: none; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 1.1rem 1.2rem; }
+.request-list { display: flex; flex-direction: column; gap: 0.75rem; }
+.review-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.review-who { display: flex; align-items: center; gap: 0.6rem; }
+.review-name { font-family: "Archivo", sans-serif; font-weight: 700; font-size: 1.05rem; }
+.kind-badge { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; border-radius: 999px; padding: 0.18rem 0.6rem; }
+.kind-correction { background: var(--accent-tint); color: var(--accent-strong); }
+.kind-timeoff { background: var(--green-bg); color: var(--green-fg); }
+.review-sub { font-size: 0.8rem; }
+.review-change { font-size: 1.02rem; margin-top: 0.6rem; color: var(--text); }
+.review-reason { color: var(--muted); margin-top: 0.2rem; font-style: italic; }
+.review-email { font-size: 0.8rem; margin-top: 0.15rem; }
+.review-affirm { color: #1f8f4e; font-size: 0.85rem; margin-top: 0.4rem; font-weight: 600; }
+.review-actions { display: flex; gap: 0.6rem; margin-top: 0.9rem; }
+.review-actions .btn-primary, .review-actions .btn-danger { padding: 0.5rem 1.4rem; }

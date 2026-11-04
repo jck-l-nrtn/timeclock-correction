@@ -40,7 +40,7 @@ const niceRange = (a: string, b: string) =>
 const titleCase = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 type Modal =
-  | { kind: "fix"; heading: string; initial: CorrectionFormInitial }
+  | { kind: "fix"; heading: string; initial: CorrectionFormInitial; original: { type: string; date: string; time: string } }
   | { kind: "add"; heading: string; initial: CorrectionFormInitial }
   | { kind: "timeoff"; date: string }
   | null;
@@ -140,6 +140,7 @@ export function TimesheetPage({ profile }: { profile: EmployeeProfile }) {
     setModal({
       kind: "fix",
       heading: `Fix your ${e.type.toLowerCase()} punch`,
+      original: { type: e.type, date: e.belongsToDate, time: entryHHmm(e) },
       initial: {
         employeeName: profile.fullName,
         employeeEmail: profile.email,
@@ -331,6 +332,7 @@ export function TimesheetPage({ profile }: { profile: EmployeeProfile }) {
                 hideIdentity
                 lockDate
                 lockEventType={modal.kind === "add"}
+                original={modal.kind === "fix" ? modal.original : undefined}
                 initial={modal.initial}
                 onCancel={() => setModal(null)}
                 onSubmitted={() => {
