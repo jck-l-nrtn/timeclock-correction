@@ -6,7 +6,7 @@ export function App() {
     <div className="shell">
       <header className="topbar">
         <Link to="/" className="brand">
-          <Brand subtitle="Timeclock Corrections" />
+          <Brand subtitle="Employee Hub" />
         </Link>
         <nav>
           <Link to="/">Home</Link>

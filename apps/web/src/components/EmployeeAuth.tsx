@@ -27,7 +27,7 @@ export function EmployeeAuth({ onAuthed }: { onAuthed: (p: EmployeeProfile) => v
 
   return (
     <section className="card">
-      <BrandHero subtitle="Timeclock Corrections" />
+      <BrandHero subtitle="Employee Hub" />
       <h1>Sign in</h1>
       <p className="muted">
         Use your Jibble email and kiosk PIN to sign in. Ask Jack if you have any questions.

@@ -5,14 +5,16 @@ import { EmployeeAuth } from "../components/EmployeeAuth.js";
 import { TimesheetView } from "../components/TimesheetView.js";
 import { RequestList } from "../components/RequestList.js";
 import { CorrectionForm } from "../components/CorrectionForm.js";
-
-type Tab = "timesheet" | "requests" | "report";
+import { HubHome, type HubView } from "../components/HubHome.js";
+import { HolidaysView } from "../components/HolidaysView.js";
+import { EmployeeInfo } from "../components/EmployeeInfo.js";
+import { TimeOffView } from "../components/TimeOffView.js";
 
 /**
- * Employee home. Priority:
+ * Employee hub. Priority:
  *   1. ?token=... in the URL  -> magic-link fallback (timesheet + requests).
- *   2. a logged-in session    -> full dashboard (timesheet, requests, report).
- *   3. otherwise               -> sign in / create account.
+ *   2. a logged-in session    -> the full hub.
+ *   3. otherwise              -> sign in.
  */
 export function EmployeeHome() {
   const [params] = useSearchParams();
@@ -29,7 +31,7 @@ export function EmployeeHome() {
       .catch(() => setMe(null));
   }, [token]);
 
-  if (token) return <Dashboard token={token} />;
+  if (token) return <TokenDashboard token={token} />;
   if (me === undefined) {
     return (
       <section className="card">
@@ -38,58 +40,51 @@ export function EmployeeHome() {
     );
   }
   if (!me) return <EmployeeAuth onAuthed={setMe} />;
-  return <Dashboard profile={me} onSignOut={() => setMe(null)} />;
+  return <Hub profile={me} onSignOut={() => setMe(null)} />;
 }
 
-function Dashboard({
-  profile,
-  token,
-  onSignOut,
-}: {
-  profile?: EmployeeProfile;
-  token?: string;
-  onSignOut?: () => void;
-}) {
-  const [tab, setTab] = useState<Tab>("timesheet");
+/** Full logged-in hub. */
+function Hub({ profile, onSignOut }: { profile: EmployeeProfile; onSignOut: () => void }) {
+  const [view, setView] = useState<"home" | HubView>("home");
+
+  const signOut = (
+    <button
+      className="btn-secondary btn-inline"
+      onClick={async () => {
+        await employeeLogout();
+        onSignOut();
+      }}
+    >
+      Sign out
+    </button>
+  );
 
   return (
     <div>
       <div className="dashboard-head">
-        <div className="tabs">
-          <button className={tab === "timesheet" ? "tab tab-active" : "tab"} onClick={() => setTab("timesheet")}>
-            My timesheet
+        {view === "home" ? (
+          <span />
+        ) : (
+          <button className="back-link" onClick={() => setView("home")}>
+            ← Hub
           </button>
-          <button className={tab === "requests" ? "tab tab-active" : "tab"} onClick={() => setTab("requests")}>
-            My requests
-          </button>
-          {profile && (
-            <button className={tab === "report" ? "tab tab-active" : "tab"} onClick={() => setTab("report")}>
-              Report an issue
-            </button>
-          )}
-        </div>
-        {profile && (
-          <div className="admin-user">
-            <span className="muted">{profile.fullName}</span>
-            <button
-              className="btn-secondary btn-inline"
-              onClick={async () => {
-                await employeeLogout();
-                onSignOut?.();
-              }}
-            >
-              Sign out
-            </button>
-          </div>
         )}
+        <div className="admin-user">
+          <span className="muted">{profile.fullName}</span>
+          {signOut}
+        </div>
       </div>
 
-      {tab === "timesheet" && <TimesheetView token={token} />}
-      {tab === "requests" && <RequestList token={token} />}
-      {tab === "report" && profile && (
+      {view === "home" && <HubHome profile={profile} onNavigate={setView} />}
+      {view === "timesheet" && <TimesheetView />}
+      {view === "requests" && <RequestList />}
+      {view === "timeoff" && <TimeOffView />}
+      {view === "holidays" && <HolidaysView />}
+      {view === "info" && <EmployeeInfo profile={profile} />}
+      {view === "report" && (
         <CorrectionForm
-          heading="Report an issue"
-          subheading="Can't find the entry on your timesheet? Submit a correction here."
+          heading="Request a timeclock correction"
+          subheading="Missed a clock-in/out or need a time fixed? Submit it here."
           hideIdentity
           initial={{
             employeeName: profile.fullName,
@@ -98,6 +93,24 @@ function Dashboard({
           }}
         />
       )}
+    </div>
+  );
+}
+
+/** Magic-link fallback — limited to timesheet + requests. */
+function TokenDashboard({ token }: { token: string }) {
+  const [tab, setTab] = useState<"timesheet" | "requests">("timesheet");
+  return (
+    <div>
+      <div className="tabs">
+        <button className={tab === "timesheet" ? "tab tab-active" : "tab"} onClick={() => setTab("timesheet")}>
+          My timesheet
+        </button>
+        <button className={tab === "requests" ? "tab tab-active" : "tab"} onClick={() => setTab("requests")}>
+          My requests
+        </button>
+      </div>
+      {tab === "timesheet" ? <TimesheetView token={token} /> : <RequestList token={token} />}
     </div>
   );
 }
