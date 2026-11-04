@@ -186,6 +186,7 @@ export interface AdminSession {
   id: string;
   email: string;
   name: string;
+  isMaster?: boolean;
 }
 
 /** Current admin session, or null if not signed in. */

@@ -159,7 +159,7 @@ function AdminShell({ session, onSignOut }: { session: AdminSession; onSignOut: 
       </header>
 
       <nav className="admin-nav seg-control">
-        {NAV.map((n) => (
+        {NAV.filter((n) => session.isMaster || (n.id !== "org" && n.id !== "users")).map((n) => (
           <button key={n.id} className={tab === n.id ? "seg seg-on" : "seg"} onClick={() => setTab(n.id)}>
             {n.label}
           </button>
@@ -169,8 +169,12 @@ function AdminShell({ session, onSignOut }: { session: AdminSession; onSignOut: 
       {tab === "timeclock" && <AdminQueue kind="correction" />}
       {tab === "timeoff" && (
         <>
-          <PtoAccrual />
-          <div style={{ height: "1.25rem" }} />
+          {session.isMaster && (
+            <>
+              <PtoAccrual />
+              <div style={{ height: "1.25rem" }} />
+            </>
+          )}
           <AdminQueue kind="timeoff" />
         </>
       )}

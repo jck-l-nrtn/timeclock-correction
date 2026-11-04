@@ -138,6 +138,27 @@ ok(bossQueue.some((r: any) => r.id === created.id) && !bossQueue.some((r: any) =
 const masterQueue = await j(await fetch(`${base}/api/admin/requests?status=pending`, { headers: { Cookie: MASTER } }));
 ok(masterQueue.some((r: any) => r.id === created.id) && masterQueue.some((r: any) => r.id === bobReq.id), "master sees all requests");
 
+// 6b. VIEW SCOPING: boss's people list is only their reports; master sees all.
+const bossPeople = await j(await fetch(`${base}/api/admin/people`, { headers: { Cookie: BOSS } }));
+ok(
+  bossPeople.some((p: any) => p.email === "jane@co.com") && !bossPeople.some((p: any) => p.email === "bob@co.com"),
+  "boss people list shows only their reports"
+);
+const masterPeople = await j(await fetch(`${base}/api/admin/people`, { headers: { Cookie: MASTER } }));
+ok(
+  masterPeople.some((p: any) => p.email === "jane@co.com") && masterPeople.some((p: any) => p.email === "bob@co.com"),
+  "master people list shows everyone"
+);
+// boss cannot view a non-report's requests; master can.
+ok(
+  (await fetch(`${base}/api/admin/employee/bob@co.com/requests`, { headers: { Cookie: BOSS } })).status === 403,
+  "boss cannot view a non-report's data -> 403"
+);
+ok(
+  (await fetch(`${base}/api/admin/employee/bob@co.com/requests`, { headers: { Cookie: MASTER } })).status === 200,
+  "master can view any employee"
+);
+
 // 7. boss may NOT decide bob's request (not their report)
 ok(
   (await fetch(`${base}/api/admin/requests/${bobReq.id}/decision`, {

@@ -55,7 +55,7 @@ authRouter.post("/master-login", (req, res) => {
     return res.status(401).json({ error: "invalid_credentials" });
   }
   issueSession(res, email);
-  return res.json({ id: "master", email, name: "Master Admin" });
+  return res.json({ id: "master", email, name: "Master Admin", isMaster: true });
 });
 
 /** GET /api/auth/me — current ADMIN (admin console gate), or 401/403. */
@@ -65,7 +65,7 @@ authRouter.get("/me", async (req, res) => {
   if (!person.isAdmin && !isMaster(person.email)) {
     return res.status(403).json({ error: "forbidden" });
   }
-  return res.json({ id: person.id, email: person.email, name: person.fullName });
+  return res.json({ id: person.id, email: person.email, name: person.fullName, isMaster: isMaster(person.email) });
 });
 
 /** POST /api/auth/logout */

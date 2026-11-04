@@ -23,6 +23,14 @@ function requireMaster(req: Request, res: Response, next: NextFunction): void {
   next();
 }
 
+/** A non-master admin may only view an employee who reports to them. */
+async function requireReport(req: Request, res: Response, next: NextFunction): Promise<void> {
+  if (req.isMaster) return next();
+  const target = await data.getPersonByEmail(req.params.email);
+  if ((target?.managerEmail ?? null) === req.admin!.email) return next();
+  res.status(403).json({ error: "not_your_report" });
+}
+
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 const personView = (p: data.PersonItem) => ({
@@ -49,16 +57,21 @@ adminRouter.get("/jibble-people", async (_req, res) => {
   return res.json(await jibbleClient.listPeople());
 });
 
-/** GET /api/admin/people — all app accounts (for the org-chart screen). */
-adminRouter.get("/people", async (_req, res) => {
+/** People visible to the acting admin: everyone (master) or their direct reports. */
+async function visiblePeople(req: Request): Promise<data.PersonItem[]> {
   const rows = await data.listPeople();
-  return res.json(rows.map(personView));
+  if (req.isMaster) return rows;
+  return rows.filter((p) => (p.managerEmail ?? null) === req.admin!.email);
+}
+
+/** GET /api/admin/people — accounts visible to this admin (reports, or all for master). */
+adminRouter.get("/people", async (req, res) => {
+  return res.json((await visiblePeople(req)).map(personView));
 });
 
 /** Back-compat alias used by the existing admin UI. */
-adminRouter.get("/employees", async (_req, res) => {
-  const rows = await data.listPeople();
-  return res.json(rows.map(personView));
+adminRouter.get("/employees", async (req, res) => {
+  return res.json((await visiblePeople(req)).map(personView));
 });
 
 /**
@@ -169,7 +182,7 @@ async function personIdFor(email: string): Promise<string | null> {
 }
 
 /** GET /api/admin/employee/:email/timesheet?from&to */
-adminRouter.get("/employee/:email/timesheet", async (req, res) => {
+adminRouter.get("/employee/:email/timesheet", requireReport, async (req, res) => {
   const email = req.params.email;
   const from = typeof req.query.from === "string" ? req.query.from : "";
   const to = typeof req.query.to === "string" ? req.query.to : "";
@@ -187,7 +200,7 @@ adminRouter.get("/employee/:email/timesheet", async (req, res) => {
 });
 
 /** GET /api/admin/employee/:email/pto */
-adminRouter.get("/employee/:email/pto", async (req, res) => {
+adminRouter.get("/employee/:email/pto", requireReport, async (req, res) => {
   try {
     const personId = await personIdFor(req.params.email);
     if (!personId) return res.json([]);
@@ -199,7 +212,7 @@ adminRouter.get("/employee/:email/pto", async (req, res) => {
 });
 
 /** GET /api/admin/employee/:email/pto-history */
-adminRouter.get("/employee/:email/pto-history", async (req, res) => {
+adminRouter.get("/employee/:email/pto-history", requireReport, async (req, res) => {
   try {
     const personId = await personIdFor(req.params.email);
     if (!personId) return res.json([]);
@@ -211,7 +224,7 @@ adminRouter.get("/employee/:email/pto-history", async (req, res) => {
 });
 
 /** GET /api/admin/employee/:email/requests — their correction + time-off requests. */
-adminRouter.get("/employee/:email/requests", async (req, res) => {
+adminRouter.get("/employee/:email/requests", requireReport, async (req, res) => {
   const rows = await data.listRequestsByEmployee(req.params.email);
   return res.json(rows.map(toCorrectionRequestDTO));
 });

@@ -56,7 +56,7 @@ export function AdminEmployees() {
   return (
     <section className="card">
       <h1>Employees</h1>
-      <p className="muted">Look up anyone's timeclock and PTO. View-only — this is for corrections and requests, not a replacement for Jibble.</p>
+      <p className="muted">Look up your team's timeclock and PTO. View-only — this is for corrections and requests, not a replacement for Jibble.</p>
       {error && <p className="error-banner">{error}</p>}
       <input
         className="emp-search"
