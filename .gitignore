@@ -24,3 +24,6 @@ apps/api/src/generated/
 
 # Claude local settings
 .claude/settings.local.json
+
+# AWS deploy secrets
+aws/.deploy.env

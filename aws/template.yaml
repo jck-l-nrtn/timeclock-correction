@@ -5,9 +5,12 @@ Description: >
   routes /api/* to the function (same origin, so cookies work).
 
 Parameters:
-  ImageUri:
+  CodeS3Bucket:
     Type: String
-    Description: ECR image URI for the Lambda (built + pushed by the deploy workflow).
+    Description: S3 bucket holding the Lambda deployment zip.
+  CodeS3Key:
+    Type: String
+    Description: S3 key of the Lambda deployment zip.
   WebOrigin:
     Type: String
     Default: https://staff.montanepm.com
@@ -87,12 +90,14 @@ Resources:
   Fn:
     Type: AWS::Lambda::Function
     Properties:
-      PackageType: Image
-      Code: { ImageUri: !Ref ImageUri }
+      Runtime: nodejs20.x
+      Handler: apps/api/dist/lambda.handler
+      Code:
+        S3Bucket: !Ref CodeS3Bucket
+        S3Key: !Ref CodeS3Key
       Role: !GetAtt LambdaRole.Arn
       MemorySize: 512
       Timeout: 30
-      Architectures: [x86_64]
       Environment:
         Variables:
           NODE_ENV: production
@@ -112,19 +117,38 @@ Resources:
           NOTIFY_EMAIL_TO: !Ref NotifyEmailTo
           REPORT_TOKEN: !Ref ReportToken
 
-  FnUrl:
-    Type: AWS::Lambda::Url
+  # HTTP API (API Gateway v2) in front of the Lambda — CloudFront routes /api/* here.
+  HttpApi:
+    Type: AWS::ApiGatewayV2::Api
     Properties:
-      TargetFunctionArn: !Ref Fn
-      AuthType: NONE
-      InvokeMode: BUFFERED
-  FnUrlPermission:
+      Name: !Sub "${AWS::StackName}-api"
+      ProtocolType: HTTP
+  HttpApiIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt Fn.Arn
+      PayloadFormatVersion: "2.0"
+  HttpApiRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "$default"
+      Target: !Sub "integrations/${HttpApiIntegration}"
+  HttpApiStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref HttpApi
+      StageName: "$default"
+      AutoDeploy: true
+  ApiInvokePermission:
     Type: AWS::Lambda::Permission
     Properties:
       FunctionName: !Ref Fn
-      Action: lambda:InvokeFunctionUrl
-      Principal: "*"
-      FunctionUrlAuthType: NONE
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*"
 
   # ---- Static site bucket ------------------------------------------------
   WebBucket:
@@ -161,6 +185,19 @@ Resources:
         SigningBehavior: always
         SigningProtocol: sigv4
 
+  # Forward everything to the API except the Host header (origin sets its own).
+  # Cookies + query strings are forwarded.
+  ApiOriginRequestPolicy:
+    Type: AWS::CloudFront::OriginRequestPolicy
+    Properties:
+      OriginRequestPolicyConfig:
+        Name: !Sub "${AWS::StackName}-api-orp"
+        CookiesConfig: { CookieBehavior: all }
+        QueryStringsConfig: { QueryStringBehavior: all }
+        HeadersConfig:
+          HeaderBehavior: allExcept
+          Headers: [host]
+
   SpaFunction:
     Type: AWS::CloudFront::Function
     Properties:
@@ -191,7 +228,7 @@ Resources:
             OriginAccessControlId: !Ref Oac
             S3OriginConfig: { OriginAccessIdentity: "" }
           - Id: lambda
-            DomainName: !Select [2, !Split ["/", !GetAtt FnUrl.FunctionUrl]]
+            DomainName: !Select [2, !Split ["/", !GetAtt HttpApi.ApiEndpoint]]
             CustomOriginConfig:
               OriginProtocolPolicy: https-only
               OriginSSLProtocols: [TLSv1.2]
@@ -208,7 +245,7 @@ Resources:
             ViewerProtocolPolicy: redirect-to-https
             AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
             CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad # CachingDisabled
-            OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac # AllViewerExceptHostHeader
+            OriginRequestPolicyId: !Ref ApiOriginRequestPolicy
 
 Outputs:
   CloudFrontUrl:
