@@ -91,6 +91,29 @@ adminRouter.post("/employees", requireMaster, async (req, res) => {
 });
 
 /**
+ * POST /api/admin/employees/bulk-create
+ * Provision an SSO-ready account for every Jibble person with an email that
+ * doesn't already have one. Master-admin only.
+ */
+adminRouter.post("/employees/bulk-create", requireMaster, async (_req, res) => {
+  const [people, existing] = await Promise.all([jibbleClient.listPeople(), data.listPeople()]);
+  const have = new Set(existing.map((p) => p.email.toLowerCase()));
+  let created = 0;
+  let skipped = 0;
+  for (const p of people) {
+    const email = p.email?.toLowerCase();
+    if (!email || have.has(email)) {
+      skipped++;
+      continue;
+    }
+    await data.upsertPerson({ email, fullName: p.fullName, jibblePersonId: p.id });
+    have.add(email);
+    created++;
+  }
+  return res.json({ created, skipped, total: people.length });
+});
+
+/**
  * PUT /api/admin/people/:email { managerEmail?, isAdmin? }
  * Set a person's approver and/or admin flag (the org chart). Master-admin only.
  */

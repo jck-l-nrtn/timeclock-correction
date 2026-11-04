@@ -1116,3 +1116,6 @@ code {
 .emp-email { font-size: 0.85rem; }
 .emp-go { color: var(--accent-strong); font-weight: 600; font-size: 0.85rem; }
 @media (max-width: 560px) { .emp-row { grid-template-columns: 1fr auto; } .emp-email { display: none; } }
+
+/* Bulk create box */
+.bulk-box { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; background: var(--accent-tint); border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.1rem; margin-bottom: 1rem; }

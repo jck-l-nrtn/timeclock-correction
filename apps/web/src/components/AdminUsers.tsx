@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ApiError,
+  adminBulkCreateEmployees,
   adminCreateEmployee,
   adminListEmployees,
   adminListJibblePeople,
@@ -21,6 +22,8 @@ export function AdminUsers() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<EmployeeAccount | null>(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkMsg, setBulkMsg] = useState<string | null>(null);
 
   const load = useCallback(() => {
     adminListJibblePeople()
@@ -38,6 +41,25 @@ export function AdminUsers() {
     const taken = new Set((accounts ?? []).map((a) => a.email.toLowerCase()));
     return (people ?? []).filter((p) => p.email && !taken.has(p.email.toLowerCase()));
   }, [people, accounts]);
+
+  async function bulkCreate() {
+    setBulkBusy(true);
+    setError(null);
+    setBulkMsg(null);
+    try {
+      const r = await adminBulkCreateEmployees();
+      setBulkMsg(
+        r.created === 0
+          ? "Everyone already has an account."
+          : `Created ${r.created} new account${r.created === 1 ? "" : "s"}${r.skipped ? `, ${r.skipped} already existed` : ""}.`
+      );
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Bulk create failed");
+    } finally {
+      setBulkBusy(false);
+    }
+  }
 
   async function create() {
     if (!selected) return;
@@ -64,6 +86,17 @@ export function AdminUsers() {
         someone ahead of time (e.g. to place them in the org chart) or to grant admin before their
         first login.
       </p>
+
+      <div className="bulk-box">
+        <div>
+          <strong>Create accounts for everyone</strong>
+          <div className="muted">Provision an SSO-ready account for every Jibble employee at once.</div>
+        </div>
+        <button className="btn-primary btn-inline" disabled={bulkBusy} onClick={bulkCreate}>
+          {bulkBusy ? "Creating…" : "Auto-create all"}
+        </button>
+      </div>
+      {bulkMsg && <p className="flash">{bulkMsg}</p>}
 
       {created && (
         <div className="record">

@@ -279,6 +279,22 @@ export async function adminListEmployees(): Promise<EmployeeAccount[]> {
   return (await res.json()) as EmployeeAccount[];
 }
 
+/** Master-admin: provision SSO-ready accounts for all Jibble people at once. */
+export async function adminBulkCreateEmployees(): Promise<{ created: number; skipped: number; total: number }> {
+  const res = await fetch("/api/admin/employees/bulk-create", {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new ApiError(
+      body?.error === "master_admin_only" ? "Only the master admin can do this." : `Failed (${res.status})`,
+      res.status
+    );
+  }
+  return (await res.json()) as { created: number; skipped: number; total: number };
+}
+
 /** Master-admin: manually provision an SSO-ready account for a Jibble person. */
 export async function adminCreateEmployee(
   jibblePersonId: string,
