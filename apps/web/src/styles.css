@@ -736,6 +736,57 @@ code {
   font-size: 0.85rem;
 }
 
+/* PTO balances */
+.badge.b-green { background: var(--green-bg); color: var(--green-fg); }
+.badge.b-slate { background: var(--slate-bg); color: var(--slate-fg); }
+
+.pto-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1rem;
+  margin: 1rem 0 0;
+}
+
+.pto-card {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+}
+
+.pto-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+
+.pto-name {
+  font-weight: 700;
+  font-family: "Archivo", sans-serif;
+  color: var(--text);
+}
+
+.pto-balance {
+  font-size: 1.9rem;
+  font-weight: 800;
+  font-family: "Archivo", sans-serif;
+  color: var(--accent-strong);
+  line-height: 1.1;
+}
+
+.pto-balance .pto-unit {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.pto-sub {
+  font-size: 0.82rem;
+  margin-top: 0.35rem;
+}
+
 /* Holiday list */
 .holiday-list {
   list-style: none;

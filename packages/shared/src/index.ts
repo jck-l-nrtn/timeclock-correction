@@ -178,3 +178,37 @@ export interface CorrectionRequestDTO {
   createdAt: string;
   updatedAt: string;
 }
+
+// ---- Employee hub: profile, PTO balances, holidays (live from Jibble) -------
+
+/** Employee profile details sourced from Jibble People. */
+export interface ProfileDetailsDTO {
+  fullName: string;
+  email: string;
+  phoneNumber: string | null;
+  role: string | null;
+  status: string | null;
+  /** Employment start date (YYYY-MM-DD), else join date. */
+  startDate: string | null;
+}
+
+/** A single time-off policy balance for a person. */
+export interface PtoBalanceDTO {
+  policyId: string;
+  policyName: string;
+  /** "Paid" | "Unpaid" (from the Jibble policy). */
+  compensation: string;
+  /** Unit the amounts are in: "Hours" | "Days". */
+  unit: string;
+  entitled: number;
+  taken: number;
+  balance: number;
+  carryForward: number;
+}
+
+/** A company paid holiday. */
+export interface HolidayDTO {
+  /** ISO date YYYY-MM-DD */
+  date: string;
+  name: string;
+}

@@ -3,7 +3,12 @@ import type {
   CreateCorrectionRequest,
   CreatePtoRequest,
   TimesheetDTO,
+  ProfileDetailsDTO,
+  PtoBalanceDTO,
+  HolidayDTO,
 } from "@timesheet/shared";
+
+export type { ProfileDetailsDTO, PtoBalanceDTO, HolidayDTO };
 
 /** Field-level validation errors returned by the API (400). */
 export interface ApiValidationError {
@@ -91,6 +96,27 @@ export async function employeeLogin(email: string, password: string): Promise<Em
 
 export async function employeeLogout(): Promise<void> {
   await fetch("/api/employee/logout", { method: "POST", credentials: "include" });
+}
+
+/** Live Jibble profile details (phone, role, status, start date) for My Info. */
+export async function fetchMyProfile(): Promise<ProfileDetailsDTO> {
+  const res = await fetch("/api/employee/profile", { credentials: "include" });
+  if (!res.ok) throw new ApiError(`Failed to load profile (${res.status})`, res.status);
+  return (await res.json()) as ProfileDetailsDTO;
+}
+
+/** The employee's time-off (PTO) policy balances, live from Jibble. */
+export async function fetchMyPto(): Promise<PtoBalanceDTO[]> {
+  const res = await fetch("/api/employee/pto", { credentials: "include" });
+  if (!res.ok) throw new ApiError(`Failed to load PTO (${res.status})`, res.status);
+  return (await res.json()) as PtoBalanceDTO[];
+}
+
+/** The company's upcoming paid holidays, live from Jibble. */
+export async function fetchHolidays(): Promise<HolidayDTO[]> {
+  const res = await fetch("/api/holidays", { credentials: "include" });
+  if (!res.ok) throw new ApiError(`Failed to load holidays (${res.status})`, res.status);
+  return (await res.json()) as HolidayDTO[];
 }
 
 /** Request a magic link for the status lookup. `devLink` is present only in dev. */

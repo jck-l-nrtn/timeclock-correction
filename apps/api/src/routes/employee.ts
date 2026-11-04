@@ -6,7 +6,9 @@ import {
   clearEmployeeSession,
   issueEmployeeSession,
   readEmployeeEmail,
+  resolveEmployee,
 } from "../services/employeeAuth.js";
+import { jibbleClient } from "../services/jibbleClient.js";
 
 export const employeeRouter = Router();
 
@@ -40,6 +42,49 @@ employeeRouter.get("/me", async (req, res) => {
   const emp = await getEmployeeByEmail(email);
   if (!emp) return res.status(401).json({ error: "unauthenticated" });
   return res.json(profile(emp));
+});
+
+/**
+ * GET /api/employee/profile
+ * Live Jibble profile details (phone, role, status, start date) for My Info.
+ * Falls back to the stored name/email if Jibble has no match.
+ */
+employeeRouter.get("/profile", async (req, res) => {
+  const emp = await resolveEmployee(req);
+  if (!emp) return res.status(401).json({ error: "unauthenticated" });
+  const fallback = {
+    fullName: emp.fullName,
+    email: emp.email,
+    phoneNumber: null,
+    role: null,
+    status: null,
+    startDate: null,
+  };
+  try {
+    const details = await jibbleClient.getProfile(emp.email);
+    return res.json(details ?? fallback);
+  } catch (err) {
+    console.error("[employee] profile lookup failed:", err);
+    return res.json(fallback);
+  }
+});
+
+/**
+ * GET /api/employee/pto
+ * The employee's time-off policy balances, live from Jibble.
+ */
+employeeRouter.get("/pto", async (req, res) => {
+  const emp = await resolveEmployee(req);
+  if (!emp) return res.status(401).json({ error: "unauthenticated" });
+  const personId =
+    emp.jibblePersonId ?? (await jibbleClient.findPersonByEmail(emp.email))?.id ?? null;
+  if (!personId) return res.json([]);
+  try {
+    return res.json(await jibbleClient.getLeaveBalances(personId));
+  } catch (err) {
+    console.error("[employee] pto lookup failed:", err);
+    return res.status(502).json({ error: "pto_unavailable" });
+  }
 });
 
 /** POST /api/employee/logout */

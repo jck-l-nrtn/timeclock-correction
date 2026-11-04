@@ -1,5 +1,11 @@
 import { config } from "../config.js";
-import type { CorrectionRequestDTO, TimesheetEntryDTO } from "@timesheet/shared";
+import type {
+  CorrectionRequestDTO,
+  TimesheetEntryDTO,
+  ProfileDetailsDTO,
+  PtoBalanceDTO,
+  HolidayDTO,
+} from "@timesheet/shared";
 
 /**
  * Jibble integration boundary.
@@ -78,6 +84,25 @@ interface RawEntry {
   status?: string;
 }
 
+interface RawBalance {
+  personId: string;
+  policyId: string;
+  entitled?: number;
+  taken?: number;
+  balance?: number;
+  carryForward?: number;
+  kind?: string;
+  isAssigned?: boolean;
+}
+
+interface RawPolicy {
+  id: string;
+  name: string;
+  compensation?: string;
+  kind?: string;
+  status?: string;
+}
+
 export interface JibbleClient {
   /** Resolve a Jibble person by email, or null if not found. */
   findPersonByEmail(email: string): Promise<JibblePerson | null>;
@@ -89,6 +114,12 @@ export interface JibbleClient {
   deleteEntry(entryId: string): Promise<void>;
   /** Push the approved correction into Jibble (or return a manual fallback). */
   applyCorrection(request: CorrectionRequestDTO): Promise<ApplyResult>;
+  /** Profile details (phone, role, status, start date) for the hub "My Info". */
+  getProfile(personId: string): Promise<ProfileDetailsDTO | null>;
+  /** A person's time-off policy balances (PTO). */
+  getLeaveBalances(personId: string): Promise<PtoBalanceDTO[]>;
+  /** The organization's upcoming paid holidays. */
+  getUpcomingHolidays(): Promise<HolidayDTO[]>;
 }
 
 /**
@@ -123,6 +154,18 @@ export class StubJibbleClient implements JibbleClient {
         `for ${request.employeeEmail} on ${request.date} at ${request.intendedTime}. ` +
         `Connect a real Jibble key to apply automatically.`,
     };
+  }
+
+  async getProfile(): Promise<ProfileDetailsDTO | null> {
+    return null;
+  }
+
+  async getLeaveBalances(): Promise<PtoBalanceDTO[]> {
+    return [];
+  }
+
+  async getUpcomingHolidays(): Promise<HolidayDTO[]> {
+    return [];
   }
 }
 
@@ -246,6 +289,80 @@ export class HttpJibbleClient implements JibbleClient {
         role: p.role ?? "",
         status: p.status ?? "",
       }));
+  }
+
+  async getProfile(email: string): Promise<ProfileDetailsDTO | null> {
+    const filter = encodeURIComponent(`email eq '${email.replace(/'/g, "''")}'`);
+    const url =
+      `${this.cfg.baseWorkspaceUrl}/v1/People?$filter=${filter}` +
+      `&$select=fullName,email,phoneNumber,role,status,workStartDate,joinDate`;
+    const res = await fetch(url, { headers: await this.authHeaders() });
+    if (!res.ok) throw new Error(`Jibble profile lookup failed (${res.status})`);
+    const json = (await res.json()) as {
+      value: {
+        fullName: string;
+        email: string;
+        phoneNumber?: string | null;
+        role?: string | null;
+        status?: string | null;
+        workStartDate?: string | null;
+        joinDate?: string | null;
+      }[];
+    };
+    const p = json.value?.[0];
+    if (!p) return null;
+    const start = p.workStartDate ?? p.joinDate ?? null;
+    return {
+      fullName: p.fullName,
+      email: p.email,
+      phoneNumber: p.phoneNumber ?? null,
+      role: p.role ?? null,
+      status: p.status ?? null,
+      startDate: start ? start.slice(0, 10) : null,
+    };
+  }
+
+  async getLeaveBalances(personId: string): Promise<PtoBalanceDTO[]> {
+    const balFilter = encodeURIComponent(`personId eq ${personId}`);
+    const [balRes, polRes] = await Promise.all([
+      fetch(`${this.cfg.baseTimeTrackingUrl}/v1/LeaveBalances?$filter=${balFilter}`, {
+        headers: await this.authHeaders(),
+      }),
+      fetch(`${this.cfg.baseWorkspaceUrl}/v1/TimeOffPolicies?$top=200`, {
+        headers: await this.authHeaders(),
+      }),
+    ]);
+    if (!balRes.ok) throw new Error(`Jibble leave balances failed (${balRes.status})`);
+    if (!polRes.ok) throw new Error(`Jibble time-off policies failed (${polRes.status})`);
+    const balances = ((await balRes.json()) as { value: RawBalance[] }).value ?? [];
+    const policies = ((await polRes.json()) as { value: RawPolicy[] }).value ?? [];
+    const byId = new Map(policies.map((p) => [p.id, p]));
+    return balances
+      .filter((b) => b.isAssigned)
+      .map((b) => {
+        const pol = byId.get(b.policyId);
+        return {
+          policyId: b.policyId,
+          policyName: pol?.name ?? "Time off",
+          compensation: pol?.compensation ?? "",
+          unit: pol?.kind ?? b.kind ?? "Hours",
+          entitled: b.entitled ?? 0,
+          taken: b.taken ?? 0,
+          balance: b.balance ?? 0,
+          carryForward: b.carryForward ?? 0,
+        };
+      });
+  }
+
+  async getUpcomingHolidays(): Promise<HolidayDTO[]> {
+    const url = `${this.cfg.baseWorkspaceUrl}/v1/UpcomingHolidays?$top=100`;
+    const res = await fetch(url, { headers: await this.authHeaders() });
+    if (!res.ok) throw new Error(`Jibble holidays failed (${res.status})`);
+    const rows = ((await res.json()) as { value: { date: string; name: string }[] }).value ?? [];
+    return rows
+      .map((h) => ({ date: (h.date ?? "").slice(0, 10), name: h.name }))
+      .filter((h) => h.date && h.name)
+      .sort((a, b) => a.date.localeCompare(b.date));
   }
 
   async listEntries(personId: string, fromDate: string, toDate: string): Promise<TimesheetEntryDTO[]> {

@@ -10,6 +10,7 @@ import { authRouter } from "./routes/auth.js";
 import { adminRouter } from "./routes/admin.js";
 import { timesheetRouter } from "./routes/timesheet.js";
 import { employeeRouter } from "./routes/employee.js";
+import { holidaysRouter } from "./routes/holidays.js";
 import { reportsRouter } from "./routes/reports.js";
 
 /** The configured Express app — shared by the local server and the Lambda handler. */
@@ -28,6 +29,7 @@ app.use("/api/requests", requestsRouter);
 app.use("/api/pto", ptoRouter);
 app.use("/api/timesheet", timesheetRouter);
 app.use("/api/employee", employeeRouter);
+app.use("/api/holidays", holidaysRouter);
 app.use("/api/reports", reportsRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/admin", adminRouter);
