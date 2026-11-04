@@ -6,9 +6,17 @@ import type {
   ProfileDetailsDTO,
   PtoBalanceDTO,
   HolidayDTO,
+  PayPeriodDef,
 } from "@timesheet/shared";
 
-export type { ProfileDetailsDTO, PtoBalanceDTO, HolidayDTO };
+export type { ProfileDetailsDTO, PtoBalanceDTO, HolidayDTO, PayPeriodDef };
+
+/** The org's pay-period definition (from Jibble, cached server-side). */
+export async function fetchPayPeriod(): Promise<PayPeriodDef> {
+  const res = await fetch("/api/employee/payperiod", { credentials: "include" });
+  if (!res.ok) throw new ApiError(`Failed to load pay period (${res.status})`, res.status);
+  return (await res.json()) as PayPeriodDef;
+}
 
 /** Field-level validation errors returned by the API (400). */
 export interface ApiValidationError {

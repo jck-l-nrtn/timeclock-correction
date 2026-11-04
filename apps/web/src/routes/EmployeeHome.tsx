@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { employeeLogout, employeeMe, type EmployeeProfile } from "../api.js";
 import { EmployeeAuth } from "../components/EmployeeAuth.js";
-import { TimesheetCalendar } from "../components/TimesheetCalendar.js";
+import { TimesheetPage } from "../components/TimesheetPage.js";
 import { RequestList } from "../components/RequestList.js";
 import { HubHome, type HubView } from "../components/HubHome.js";
 import { HolidaysView } from "../components/HolidaysView.js";
@@ -66,7 +66,7 @@ function Hub({ profile, onSignOut }: { profile: EmployeeProfile; onSignOut: () =
       </div>
 
       {view === "home" && <HubHome profile={profile} onNavigate={setView} />}
-      {(view === "timesheet" || view === "report") && <TimesheetCalendar profile={profile} />}
+      {(view === "timesheet" || view === "report") && <TimesheetPage profile={profile} />}
       {view === "requests" && <RequestList />}
       {view === "timeoff" && <TimeOffView profile={profile} />}
       {view === "holidays" && <HolidaysView />}

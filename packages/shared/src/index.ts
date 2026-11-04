@@ -214,3 +214,63 @@ export interface HolidayDTO {
   date: string;
   name: string;
 }
+
+// ---- Pay periods (driven by the Jibble pay-period definition) --------------
+
+/** The org's pay-period definition (from Jibble PayPeriodDefinitions). */
+export interface PayPeriodDef {
+  name: string;
+  /** Jibble cycle, e.g. "Weekly" | "OnceInTwoWeeks" | "OnceInFourWeeks". */
+  cycle: string;
+  /** Anchor date (YYYY-MM-DD) the cycle counts from. */
+  startFromDate: string;
+  startAtDayOfWeek: string;
+}
+
+export interface PayPeriod {
+  /** Period start (YYYY-MM-DD, inclusive). */
+  start: string;
+  /** Period end (YYYY-MM-DD, inclusive). */
+  end: string;
+  /** Whole-day length of the period. */
+  length: number;
+  /** Index relative to the anchor (0 = the period containing the anchor). */
+  index: number;
+}
+
+const DAY_MS = 86_400_000;
+const utc = (ymd: string) => Date.parse(`${ymd}T00:00:00Z`);
+/** Add whole days to a YYYY-MM-DD string (UTC math — DST-safe). */
+export function addDaysStr(ymd: string, days: number): string {
+  return new Date(utc(ymd) + days * DAY_MS).toISOString().slice(0, 10);
+}
+const diffDays = (a: string, b: string) => Math.round((utc(a) - utc(b)) / DAY_MS);
+
+/** Whole-day length of a Jibble pay-period cycle (defaults to biweekly). */
+export function payPeriodLength(cycle: string): number {
+  switch (cycle) {
+    case "Weekly":
+      return 7;
+    case "OnceInTwoWeeks":
+      return 14;
+    case "OnceInFourWeeks":
+    case "EveryFourWeeks":
+      return 28;
+    default:
+      return 14;
+  }
+}
+
+/** The pay period containing `dateYmd`, aligned to the definition's anchor. */
+export function payPeriodFor(def: PayPeriodDef, dateYmd: string): PayPeriod {
+  const length = payPeriodLength(def.cycle);
+  const index = Math.floor(diffDays(dateYmd, def.startFromDate) / length);
+  const start = addDaysStr(def.startFromDate, index * length);
+  return { start, end: addDaysStr(start, length - 1), length, index };
+}
+
+/** Step `n` periods from a given period (n<0 = earlier). */
+export function stepPayPeriod(def: PayPeriodDef, period: PayPeriod, n: number): PayPeriod {
+  const start = addDaysStr(period.start, n * period.length);
+  return { start, end: addDaysStr(start, period.length - 1), length: period.length, index: period.index + n };
+}

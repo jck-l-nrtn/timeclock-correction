@@ -6,63 +6,12 @@ import {
   type TimesheetEntryDTO,
 } from "@timesheet/shared";
 import { fetchHolidays, fetchMyRequests, fetchTimesheet, type EmployeeProfile } from "../api.js";
+import { addDays, entryHHmm, hoursFor as dayHours, isIn, parseYmd, startOfWeek, ymd } from "../timeUtil.js";
 import { CorrectionForm, type CorrectionFormInitial } from "./CorrectionForm.js";
 import { PtoForm } from "./PtoForm.js";
 
-// ---- local date helpers (never UTC — fixes the evening day-roll bug) --------
-const pad = (n: number) => String(n).padStart(2, "0");
-const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-const parseYmd = (s: string) => new Date(s + "T00:00:00");
-const addDays = (d: Date, n: number) => {
-  const c = new Date(d);
-  c.setDate(c.getDate() + n);
-  return c;
-};
-const startOfWeek = (d: Date) => addDays(d, -d.getDay()); // Sunday start
 const sameMonth = (a: Date, b: Date) => a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear();
 const isToday = (d: Date) => ymd(d) === ymd(new Date());
-
-/** Parse an ISO-8601 duration offset ("-PT6H", "PT5H30M") to minutes. */
-function offsetMinutes(offset: string | null): number | null {
-  if (!offset) return null;
-  const m = /^(-)?PT(?:(\d+)H)?(?:(\d+)M)?$/.exec(offset);
-  if (!m) return null;
-  const mins = (Number(m[2] || 0) * 60 + Number(m[3] || 0)) * (m[1] ? -1 : 1);
-  return mins;
-}
-
-/** The entry's local wall-clock HH:mm — from localTime, else timeUtc+offset. */
-function entryHHmm(e: TimesheetEntryDTO): string {
-  if (e.localTime) {
-    const t = e.localTime.split("T")[1];
-    if (t) return t.slice(0, 5);
-  }
-  const off = offsetMinutes(e.offset);
-  if (off !== null) {
-    const local = new Date(new Date(e.timeUtc).getTime() + off * 60000);
-    return `${pad(local.getUTCHours())}:${pad(local.getUTCMinutes())}`;
-  }
-  // Last resort: show UTC time (should be rare).
-  const t = e.timeUtc.split("T")[1];
-  return t ? t.slice(0, 5) : "";
-}
-
-const isIn = (e: TimesheetEntryDTO) => e.type.toLowerCase() === "in";
-
-/** Hours worked on a day: pair In→Out by UTC and sum (UTC diff is tz-safe). */
-function dayHours(entries: TimesheetEntryDTO[]): number {
-  const sorted = [...entries].sort((a, b) => a.timeUtc.localeCompare(b.timeUtc));
-  let total = 0;
-  let open: TimesheetEntryDTO | null = null;
-  for (const e of sorted) {
-    if (isIn(e)) open = e;
-    else if (open) {
-      total += (new Date(e.timeUtc).getTime() - new Date(open.timeUtc).getTime()) / 3600000;
-      open = null;
-    }
-  }
-  return total;
-}
 const fmtHours = (h: number) => (h <= 0 ? "" : `${h.toFixed(2)}h`);
 
 interface TimeOffDay {

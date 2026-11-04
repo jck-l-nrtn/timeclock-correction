@@ -5,6 +5,7 @@ import type {
   ProfileDetailsDTO,
   PtoBalanceDTO,
   HolidayDTO,
+  PayPeriodDef,
 } from "@timesheet/shared";
 
 /**
@@ -120,7 +121,17 @@ export interface JibbleClient {
   getLeaveBalances(personId: string): Promise<PtoBalanceDTO[]>;
   /** The organization's upcoming paid holidays. */
   getUpcomingHolidays(): Promise<HolidayDTO[]>;
+  /** The org's default pay-period definition. */
+  getPayPeriodDefinition(): Promise<PayPeriodDef>;
 }
+
+/** Sensible fallback pay period (Montane: biweekly, Sunday start). */
+const DEFAULT_PAY_PERIOD: PayPeriodDef = {
+  name: "Pay Period",
+  cycle: "OnceInTwoWeeks",
+  startFromDate: "2024-03-10",
+  startAtDayOfWeek: "Sunday",
+};
 
 /**
  * Phase 1 stub. Deterministic, no network. Lets us exercise approve → apply
@@ -166,6 +177,10 @@ export class StubJibbleClient implements JibbleClient {
 
   async getUpcomingHolidays(): Promise<HolidayDTO[]> {
     return [];
+  }
+
+  async getPayPeriodDefinition(): Promise<PayPeriodDef> {
+    return DEFAULT_PAY_PERIOD;
   }
 }
 
@@ -363,6 +378,29 @@ export class HttpJibbleClient implements JibbleClient {
       .map((h) => ({ date: (h.date ?? "").slice(0, 10), name: h.name }))
       .filter((h) => h.date && h.name)
       .sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  async getPayPeriodDefinition(): Promise<PayPeriodDef> {
+    try {
+      const res = await fetch(`${this.cfg.baseWorkspaceUrl}/v1/PayPeriodDefinitions?$top=50`, {
+        headers: await this.authHeaders(),
+      });
+      if (!res.ok) return DEFAULT_PAY_PERIOD;
+      const rows = ((await res.json()) as { value: Array<Record<string, unknown>> }).value ?? [];
+      const def = (rows.find((r) => r.default === true) ?? rows[0]) as
+        | { name?: string; cycle?: string; startFromDate?: string; startAtDayOfWeek?: string }
+        | undefined;
+      if (!def?.startFromDate) return DEFAULT_PAY_PERIOD;
+      return {
+        name: def.name ?? "Pay Period",
+        cycle: def.cycle ?? "OnceInTwoWeeks",
+        startFromDate: def.startFromDate.slice(0, 10),
+        startAtDayOfWeek: def.startAtDayOfWeek ?? "Sunday",
+      };
+    } catch (err) {
+      console.warn("[jibble] pay-period definition failed (non-fatal):", err);
+      return DEFAULT_PAY_PERIOD;
+    }
   }
 
   async listEntries(personId: string, fromDate: string, toDate: string): Promise<TimesheetEntryDTO[]> {

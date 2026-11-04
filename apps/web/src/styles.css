@@ -914,3 +914,60 @@ code {
   .cal-punch, .cal-chip { font-size: 0.62rem; }
   .week-row { grid-template-columns: 70px 1fr 56px; }
 }
+
+/* ===== Segmented control ===== */
+.seg-control { display: inline-flex; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 3px; gap: 2px; margin-bottom: 1rem; }
+.seg { border: none; background: transparent; color: var(--muted); font: inherit; font-weight: 600; font-size: 0.9rem; padding: 0.45rem 1.1rem; border-radius: 8px; cursor: pointer; }
+.seg-on { background: var(--surface); color: var(--accent-strong); box-shadow: 0 1px 2px rgba(10,24,37,0.1); }
+.seg-sm .seg { padding: 0.3rem 0.8rem; font-size: 0.82rem; }
+
+/* ===== Live clock banner ===== */
+.clock-banner { display: flex; align-items: center; gap: 0.7rem; background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--slate-fg); border-radius: 12px; padding: 0.85rem 1.1rem; margin-bottom: 1rem; }
+.clock-banner.clock-on { border-left-color: #1f8f4e; background: linear-gradient(90deg, rgba(31,143,78,0.07), transparent 40%); }
+.clock-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--slate-fg); flex: none; }
+.clock-on .clock-dot { background: #1f8f4e; box-shadow: 0 0 0 4px rgba(31,143,78,0.18); }
+.clock-text { font-size: 0.98rem; }
+.clock-date { margin-left: auto; font-size: 0.85rem; }
+
+/* ===== Pay-period selector ===== */
+.period-bar { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem; }
+.period-label { text-align: center; }
+.period-range { font-family: "Archivo", sans-serif; font-weight: 700; font-size: 1.15rem; color: var(--text); }
+.period-name { font-size: 0.8rem; text-transform: capitalize; }
+.period-bar .btn-link { margin-left: auto; }
+
+/* ===== Stat cards ===== */
+.stat-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.85rem; margin-bottom: 1.25rem; }
+.stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 1.1rem 1.15rem; }
+.stat-primary { background: linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%); border: none; color: #fff; }
+.stat-primary .stat-cap { color: rgba(255,255,255,0.85); }
+.stat-big { font-family: "Archivo", sans-serif; font-weight: 800; font-size: 2rem; line-height: 1; color: var(--accent-strong); }
+.stat-primary .stat-big { color: #fff; }
+.stat-cap { margin-top: 0.3rem; font-size: 0.78rem; color: var(--muted); }
+
+/* ===== Weekly breakdown ===== */
+.week-card { padding: 1rem 1.25rem; }
+.week-card-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 0.5rem; }
+.week-card-head h2 { font-size: 1rem; margin: 0; }
+.week-hours { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--accent-strong); }
+.week-ot { color: #b2541a; }
+.ts-table { display: flex; flex-direction: column; }
+.ts-row { display: grid; grid-template-columns: 110px 1fr 64px; gap: 0.75rem; align-items: center; padding: 0.55rem 0; border-top: 1px solid var(--border); }
+.ts-row:first-child { border-top: none; }
+.ts-today { background: var(--accent-tint); border-radius: 8px; padding-left: 0.5rem; padding-right: 0.5rem; }
+.ts-empty { opacity: 0.6; }
+.ts-day { font-weight: 600; font-size: 0.9rem; }
+.ts-segs { display: flex; flex-wrap: wrap; gap: 0.4rem 0.9rem; }
+.ts-seg { font-variant-numeric: tabular-nums; font-size: 0.9rem; white-space: nowrap; }
+.ts-arrow { color: var(--muted); margin: 0 0.25rem; }
+.ts-seg em { color: #1f8f4e; font-style: normal; font-weight: 600; }
+.ts-hours { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+.period-total { display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.25rem; background: var(--navy); color: #fff; border-radius: 12px; font-family: "Archivo", sans-serif; }
+.period-total strong { font-size: 1.3rem; }
+
+@media (max-width: 620px) {
+  .ts-row { grid-template-columns: 84px 1fr 52px; gap: 0.4rem; }
+  .ts-seg, .ts-day { font-size: 0.82rem; }
+  .stat-big { font-size: 1.7rem; }
+  .clock-date { display: none; }
+}

@@ -65,6 +65,23 @@ employeeRouter.get("/pto", async (req, res) => {
   }
 });
 
+// Pay-period definition is org-wide and rarely changes — cache it briefly.
+let ppCache: { at: number; def: unknown } | null = null;
+/** GET /api/employee/payperiod — the org's pay-period definition (from Jibble). */
+employeeRouter.get("/payperiod", async (req, res) => {
+  const emp = await resolveEmployee(req);
+  if (!emp) return res.status(401).json({ error: "unauthenticated" });
+  if (ppCache && Date.now() - ppCache.at < 10 * 60 * 1000) return res.json(ppCache.def);
+  try {
+    const def = await jibbleClient.getPayPeriodDefinition();
+    ppCache = { at: Date.now(), def };
+    return res.json(def);
+  } catch (err) {
+    console.error("[employee] pay-period lookup failed:", err);
+    return res.status(502).json({ error: "payperiod_unavailable" });
+  }
+});
+
 /** POST /api/employee/logout */
 employeeRouter.post("/logout", (_req, res) => {
   clearEmployeeSession(res);

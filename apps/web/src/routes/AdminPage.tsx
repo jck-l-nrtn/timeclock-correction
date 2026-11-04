@@ -9,14 +9,13 @@ import {
   submitDecision,
   type AdminSession,
 } from "../api.js";
-import { StatusBadge } from "../components/StatusBadge.js";
 import { AdminUsers } from "../components/AdminUsers.js";
 import { OrgPeople } from "../components/OrgPeople.js";
 import { AdminLog } from "../components/AdminLog.js";
-import { ConfirmDialog } from "../components/ConfirmDialog.js";
 import { BrandHero } from "../components/Brand.js";
 import { GoogleButton } from "../components/GoogleButton.js";
-import { summarizeRequest } from "../labels.js";
+import { QueueItem } from "../components/QueueItem.js";
+import { AdminRequestsCalendar } from "../components/AdminRequestsCalendar.js";
 
 /**
  * Admin dashboard. Gate on session:
@@ -162,6 +161,7 @@ function AdminQueue() {
   const [queue, setQueue] = useState<CorrectionRequestDTO[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
+  const [mode, setMode] = useState<"calendar" | "list">("calendar");
 
   const load = useCallback(() => {
     fetchAdminQueue("pending")
@@ -175,7 +175,6 @@ function AdminQueue() {
     setError(null);
     try {
       const updated = await submitDecision(req.id, decision, note.trim() || undefined);
-      // Remove from the pending queue and surface the outcome.
       setQueue((q) => (q ? q.filter((r) => r.id !== req.id) : q));
       setFlash(
         `${req.employeeName}'s request was ${decision}` +
@@ -188,7 +187,13 @@ function AdminQueue() {
 
   return (
     <section className="card">
-      <h1>Review queue</h1>
+      <div className="cal-head">
+        <h1>Review queue</h1>
+        <div className="seg-control seg-sm">
+          <button className={mode === "calendar" ? "seg seg-on" : "seg"} onClick={() => setMode("calendar")}>Calendar</button>
+          <button className={mode === "list" ? "seg seg-on" : "seg"} onClick={() => setMode("list")}>List</button>
+        </div>
+      </div>
 
       {flash && <p className="flash">{flash}</p>}
       {error && <p className="error-banner">{error}</p>}
@@ -196,87 +201,16 @@ function AdminQueue() {
       {!queue && <p className="muted">Loading…</p>}
       {queue && queue.length === 0 && <p className="muted">No pending requests. 🎉</p>}
 
-      {queue && queue.length > 0 && (
+      {queue && queue.length > 0 && mode === "list" && (
         <ul className="request-list">
           {queue.map((r) => (
             <QueueItem key={r.id} request={r} onDecide={decide} />
           ))}
         </ul>
       )}
-    </section>
-  );
-}
-
-function QueueItem({
-  request,
-  onDecide,
-}: {
-  request: CorrectionRequestDTO;
-  onDecide: (r: CorrectionRequestDTO, d: "approved" | "denied", note: string) => Promise<void>;
-}) {
-  const [note, setNote] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [pending, setPending] = useState<"approved" | "denied" | null>(null);
-
-  async function confirmDecision() {
-    if (!pending) return;
-    setBusy(true);
-    await onDecide(request, pending, note);
-    setBusy(false);
-    setPending(null);
-  }
-
-  const changeLabel = summarizeRequest(request);
-
-  return (
-    <li className="request-item queue-item">
-      <div className="request-main">
-        <div className="request-title">
-          {request.employeeName}
-          {request.kind === "timeoff" ? " · Time off" : ""}
-        </div>
-        <div className="muted">
-          {summarizeRequest(request)} · {request.employeeEmail}
-        </div>
-        <div className="request-reason muted">“{request.reason}”</div>
-        {request.kind !== "timeoff" && request.affirmed && (
-          <div className="muted request-affirm">✓ Employee affirmed the information is correct</div>
-        )}
-        <textarea
-          rows={2}
-          className="note-input"
-          placeholder="Note (optional) — shown to the employee"
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-        />
-        <div className="queue-actions">
-          <button className="btn-primary" disabled={busy} onClick={() => setPending("approved")}>
-            Approve
-          </button>
-          <button className="btn-danger" disabled={busy} onClick={() => setPending("denied")}>
-            Deny
-          </button>
-        </div>
-      </div>
-      <StatusBadge status={request.status} />
-
-      {pending && (
-        <ConfirmDialog
-          title={pending === "approved" ? "Approve request?" : "Deny request?"}
-          message={
-            `${request.employeeName}: ${changeLabel}.` +
-            (pending === "approved"
-              ? " This will apply the correction to Jibble."
-              : " The employee will see it was denied.") +
-            (note.trim() ? ` Note: “${note.trim()}”.` : "")
-          }
-          confirmLabel={pending === "approved" ? "Approve" : "Deny"}
-          danger={pending === "denied"}
-          busy={busy}
-          onConfirm={confirmDecision}
-          onCancel={() => setPending(null)}
-        />
+      {queue && queue.length > 0 && mode === "calendar" && (
+        <AdminRequestsCalendar requests={queue} onDecide={decide} />
       )}
-    </li>
+    </section>
   );
 }
