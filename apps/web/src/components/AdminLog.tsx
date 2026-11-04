@@ -3,7 +3,7 @@ import type { CorrectionRequestDTO, DigitalRecord } from "@timesheet/shared";
 import { ApiError, fetchAdminLog } from "../api.js";
 import { StatusBadge } from "./StatusBadge.js";
 import { DigitalRecordView } from "./DigitalRecordView.js";
-import { labelForEvent } from "../labels.js";
+import { summarizeRequest } from "../labels.js";
 
 function parseRecord(json: string | null): DigitalRecord | null {
   if (!json) return null;
@@ -49,7 +49,7 @@ export function AdminLog() {
                 <div className="request-card-head">
                   <div className="request-main">
                     <div className="request-title">
-                      {r.employeeName} · {labelForEvent(r.eventType)} · {r.date} at {r.intendedTime}
+                      {r.employeeName} · {summarizeRequest(r)}
                     </div>
                     <div className="muted">
                       {r.decidedBy ? `${r.decidedBy}` : "—"}

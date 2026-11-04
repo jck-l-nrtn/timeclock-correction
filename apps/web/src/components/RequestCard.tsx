@@ -3,7 +3,7 @@ import { RequestStatus, type CorrectionRequestDTO, type DigitalRecord } from "@t
 import { ApiError, acknowledgeRequest } from "../api.js";
 import { StatusBadge } from "./StatusBadge.js";
 import { DigitalRecordView } from "./DigitalRecordView.js";
-import { labelForEvent } from "../labels.js";
+import { summarizeRequest } from "../labels.js";
 
 const ACKNOWLEDGEABLE: string[] = [RequestStatus.Approved, RequestStatus.Applied, RequestStatus.Failed];
 
@@ -49,9 +49,7 @@ export function RequestCard({
     <li className="request-item request-card">
       <div className="request-card-head">
         <div className="request-main">
-          <div className="request-title">
-            {labelForEvent(request.eventType)} · {request.date} at {request.intendedTime}
-          </div>
+          <div className="request-title">{summarizeRequest(request)}</div>
           <div className="muted request-reason">{request.reason}</div>
           {request.decisionNote && <div className="request-note">Admin note: {request.decisionNote}</div>}
         </div>

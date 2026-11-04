@@ -1,4 +1,9 @@
-import type { CorrectionRequestDTO, CreateCorrectionRequest, TimesheetDTO } from "@timesheet/shared";
+import type {
+  CorrectionRequestDTO,
+  CreateCorrectionRequest,
+  CreatePtoRequest,
+  TimesheetDTO,
+} from "@timesheet/shared";
 
 /** Field-level validation errors returned by the API (400). */
 export interface ApiValidationError {
@@ -34,6 +39,21 @@ export async function submitCorrectionRequest(
       res.status,
       body?.issues
     );
+  }
+  return (await res.json()) as CorrectionRequestDTO;
+}
+
+/** Submit a time-off (PTO) request. Throws ApiError on non-2xx. */
+export async function submitPtoRequest(input: CreatePtoRequest): Promise<CorrectionRequestDTO> {
+  const res = await fetch("/api/pto", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as ApiValidationError | null;
+    throw new ApiError(body?.error ?? `Request failed (${res.status})`, res.status, body?.issues);
   }
   return (await res.json()) as CorrectionRequestDTO;
 }

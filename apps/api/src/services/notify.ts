@@ -8,6 +8,20 @@ const EVENT_LABEL: Record<string, string> = {
   adjust: "time adjustment",
 };
 
+function kindLabel(r: CorrectionRequestDTO): string {
+  return r.kind === "timeoff" ? "time-off request" : "timeclock correction";
+}
+
+function summarize(r: CorrectionRequestDTO): string {
+  if (r.kind === "timeoff") {
+    const t = r.ptoType ? r.ptoType[0].toUpperCase() + r.ptoType.slice(1) : "Time off";
+    const range =
+      r.endDate && r.endDate !== r.startDate ? `${r.startDate} to ${r.endDate}` : r.startDate;
+    return `${t} — ${range}`;
+  }
+  return `${EVENT_LABEL[r.eventType] ?? r.eventType} on ${r.date} at ${r.intendedTime}`;
+}
+
 /**
  * Notification boundary. Admin-facing events (new request, decision) can post to
  * a webhook (Slack/Teams/any JSON endpoint) when NOTIFY_WEBHOOK_URL is set;
@@ -25,15 +39,13 @@ export interface Notifier {
 class ConsoleNotifier implements Notifier {
   async newRequestSubmitted(r: CorrectionRequestDTO): Promise<void> {
     console.log(
-      `[notify] New correction request ${r.id} from ${r.employeeName} <${r.employeeEmail}> — ` +
-        `${r.eventType} on ${r.date} @ ${r.intendedTime}`
+      `[notify] New ${kindLabel(r)} ${r.id} from ${r.employeeName} <${r.employeeEmail}> — ${summarize(r)}`
     );
-    const label = EVENT_LABEL[r.eventType] ?? r.eventType;
     await sendEmail({
-      subject: `New timeclock correction — ${r.employeeName}`,
+      subject: `New ${kindLabel(r)} — ${r.employeeName}`,
       text:
-        `${r.employeeName} (${r.employeeEmail}) submitted a ${label} request.\n\n` +
-        `Date: ${r.date}\nIntended time: ${r.intendedTime}\nReason: ${r.reason}\n\n` +
+        `${r.employeeName} (${r.employeeEmail}) submitted a ${kindLabel(r)}.\n\n` +
+        `${summarize(r)}\nReason: ${r.reason}\n\n` +
         `Review it: ${config.webOrigin}/admin`,
     });
   }
@@ -78,13 +90,13 @@ class WebhookNotifier extends ConsoleNotifier {
   async newRequestSubmitted(r: CorrectionRequestDTO): Promise<void> {
     await super.newRequestSubmitted(r);
     await this.post(
-      `🕒 New timeclock correction from *${r.employeeName}* — ${r.eventType} on ${r.date} at ${r.intendedTime}. Reason: ${r.reason}`
+      `🕒 New ${kindLabel(r)} from *${r.employeeName}* — ${summarize(r)}. Reason: ${r.reason}`
     );
   }
 
   async requestDecided(r: CorrectionRequestDTO): Promise<void> {
     await super.requestDecided(r);
-    await this.post(`✅ Correction ${r.id} for ${r.employeeEmail} is now *${r.status}*.`);
+    await this.post(`✅ ${kindLabel(r)} ${r.id} for ${r.employeeEmail} is now *${r.status}*.`);
   }
   // sendMagicLink intentionally inherited (console only) — never webhooked.
 }

@@ -13,7 +13,7 @@ import { AdminUsers } from "../components/AdminUsers.js";
 import { AdminLog } from "../components/AdminLog.js";
 import { ConfirmDialog } from "../components/ConfirmDialog.js";
 import { BrandHero } from "../components/Brand.js";
-import { labelForEvent } from "../labels.js";
+import { summarizeRequest } from "../labels.js";
 
 /**
  * Admin dashboard. Gate on session:
@@ -203,19 +203,20 @@ function QueueItem({
     setPending(null);
   }
 
-  const changeLabel = `${labelForEvent(request.eventType)} on ${request.date} at ${request.intendedTime}`;
+  const changeLabel = summarizeRequest(request);
 
   return (
     <li className="request-item queue-item">
       <div className="request-main">
         <div className="request-title">
-          {request.employeeName} · {labelForEvent(request.eventType)}
+          {request.employeeName}
+          {request.kind === "timeoff" ? " · Time off" : ""}
         </div>
         <div className="muted">
-          {request.date} at {request.intendedTime} · {request.employeeEmail}
+          {summarizeRequest(request)} · {request.employeeEmail}
         </div>
         <div className="request-reason muted">“{request.reason}”</div>
-        {request.affirmed && (
+        {request.kind !== "timeoff" && request.affirmed && (
           <div className="muted request-affirm">✓ Employee affirmed the information is correct</div>
         )}
         <textarea

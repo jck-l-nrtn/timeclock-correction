@@ -5,6 +5,7 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import { config, isProd } from "./config.js";
 import { requestsRouter } from "./routes/requests.js";
+import { ptoRouter } from "./routes/pto.js";
 import { authRouter } from "./routes/auth.js";
 import { adminRouter } from "./routes/admin.js";
 import { timesheetRouter } from "./routes/timesheet.js";
@@ -24,6 +25,7 @@ app.get("/api/health", (_req, res) => {
 });
 
 app.use("/api/requests", requestsRouter);
+app.use("/api/pto", ptoRouter);
 app.use("/api/timesheet", timesheetRouter);
 app.use("/api/employee", employeeRouter);
 app.use("/api/reports", reportsRouter);

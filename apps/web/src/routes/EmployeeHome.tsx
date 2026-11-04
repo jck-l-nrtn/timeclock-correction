@@ -78,7 +78,7 @@ function Hub({ profile, onSignOut }: { profile: EmployeeProfile; onSignOut: () =
       {view === "home" && <HubHome profile={profile} onNavigate={setView} />}
       {view === "timesheet" && <TimesheetView />}
       {view === "requests" && <RequestList />}
-      {view === "timeoff" && <TimeOffView />}
+      {view === "timeoff" && <TimeOffView profile={profile} />}
       {view === "holidays" && <HolidaysView />}
       {view === "info" && <EmployeeInfo profile={profile} />}
       {view === "report" && (

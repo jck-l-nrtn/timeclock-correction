@@ -131,6 +131,31 @@ const ack = await j(
 );
 ok(ack.employeeAckSignature === "Jane Doe" && !!ack.ackAt, "acknowledge");
 
+// 9. PTO request flow
+const pto = await j(
+  await fetch(`${base}/api/pto`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      employeeName: "Jane Doe", employeeEmail: "jane@co.com",
+      ptoType: "vacation", startDate: "2026-12-20", endDate: "2026-12-24", reason: "Holidays",
+    }),
+  })
+);
+ok(pto.kind === "timeoff" && pto.status === "pending" && pto.ptoType === "vacation", "PTO submit -> pending timeoff");
+
+const ptoQueue = await j(await fetch(`${base}/api/admin/requests?status=pending`, { headers: { Cookie: AC } }));
+ok(ptoQueue.some((r: any) => r.id === pto.id && r.kind === "timeoff"), "PTO shows in admin queue");
+
+const ptoDecided = await j(
+  await fetch(`${base}/api/admin/requests/${pto.id}/decision`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Cookie: AC },
+    body: JSON.stringify({ decision: "approved", note: "Enjoy" }),
+  })
+);
+ok(ptoDecided.status === "approved" && !ptoDecided.digitalRecord, "PTO approve -> approved, no Jibble/record");
+
 server.close();
 console.log("done");
 process.exit(0);

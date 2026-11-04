@@ -137,6 +137,7 @@ export async function upsertAdmin(input: {
 
 export interface RequestItem {
   id: string;
+  kind: string; // "correction" | "timeoff"
   employeeName: string;
   employeeEmail: string;
   jibblePersonId: string | null;
@@ -144,6 +145,9 @@ export interface RequestItem {
   date: string;
   eventType: string;
   intendedTime: string;
+  ptoType: string | null;
+  startDate: string | null;
+  endDate: string | null;
   reason: string;
   affirmed: boolean;
   status: string;
@@ -173,7 +177,8 @@ function requestKeys(i: RequestItem): Record<string, unknown> {
     keys.GSI3PK = "DECIDED";
     keys.GSI3SK = i.decidedAt;
   }
-  if (i.status === "approved" || i.status === "applied") {
+  // Only timeclock corrections feed the pay-period report (GSI4); PTO does not.
+  if ((i.status === "approved" || i.status === "applied") && i.kind === "correction") {
     keys.GSI4PK = "CHANGE";
     keys.GSI4SK = `${i.date}#${i.id}`;
   }
@@ -201,6 +206,7 @@ export async function createRequest(input: {
   const ts = now();
   const item: RequestItem = {
     id: randomUUID(),
+    kind: "correction",
     employeeName: input.employeeName,
     employeeEmail: norm(input.employeeEmail),
     jibblePersonId: input.jibblePersonId,
@@ -208,8 +214,53 @@ export async function createRequest(input: {
     date: input.date,
     eventType: input.eventType,
     intendedTime: input.intendedTime,
+    ptoType: null,
+    startDate: null,
+    endDate: null,
     reason: input.reason,
     affirmed: input.affirmed,
+    status: "pending",
+    decisionNote: null,
+    decidedByAdminId: null,
+    decidedByName: null,
+    decidedAt: null,
+    jibbleResult: null,
+    digitalRecord: null,
+    employeeAckSignature: null,
+    ackAt: null,
+    createdAt: ts,
+    updatedAt: ts,
+  };
+  await ddb.send(new PutCommand({ TableName: TABLE, Item: { ...item, ...requestKeys(item) } }));
+  return item;
+}
+
+/** Create a time-off (PTO) request — routed to admin, no Jibble write. */
+export async function createPtoRequest(input: {
+  employeeName: string;
+  employeeEmail: string;
+  jibblePersonId: string | null;
+  ptoType: string;
+  startDate: string;
+  endDate: string;
+  reason: string;
+}): Promise<RequestItem> {
+  const ts = now();
+  const item: RequestItem = {
+    id: randomUUID(),
+    kind: "timeoff",
+    employeeName: input.employeeName,
+    employeeEmail: norm(input.employeeEmail),
+    jibblePersonId: input.jibblePersonId,
+    jibbleEntryId: null,
+    date: input.startDate, // for index sorting
+    eventType: "adjust", // unused for PTO
+    intendedTime: "00:00", // unused for PTO
+    ptoType: input.ptoType,
+    startDate: input.startDate,
+    endDate: input.endDate,
+    reason: input.reason,
+    affirmed: true,
     status: "pending",
     decisionNote: null,
     decidedByAdminId: null,

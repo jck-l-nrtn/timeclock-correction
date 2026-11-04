@@ -140,6 +140,9 @@ adminRouter.post("/requests/:id/decision", async (req, res) => {
 
   if (decision === RequestStatus.Denied) {
     row.status = RequestStatus.Denied;
+  } else if (row.kind === "timeoff") {
+    // PTO is approved in-app only — no Jibble write.
+    row.status = RequestStatus.Approved;
   } else {
     row.status = RequestStatus.Approved;
     try {
@@ -157,7 +160,10 @@ adminRouter.post("/requests/:id/decision", async (req, res) => {
     }
   }
 
-  row.digitalRecord = JSON.stringify(buildDigitalRecord(row, admin.name));
+  // The immutable digital record (with signature) is for timeclock corrections.
+  if (row.kind !== "timeoff") {
+    row.digitalRecord = JSON.stringify(buildDigitalRecord(row, admin.name));
+  }
   const saved = await data.putRequest(row);
 
   const dto = toCorrectionRequestDTO(saved);

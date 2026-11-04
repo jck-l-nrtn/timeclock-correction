@@ -24,6 +24,21 @@ export const RequestStatus = {
 } as const;
 export type RequestStatus = (typeof RequestStatus)[keyof typeof RequestStatus];
 
+/** A request is either a timeclock correction or a time-off (PTO) request. */
+export const RequestKind = {
+  Correction: "correction",
+  TimeOff: "timeoff",
+} as const;
+export type RequestKind = (typeof RequestKind)[keyof typeof RequestKind];
+
+export const PtoType = {
+  Vacation: "vacation",
+  Sick: "sick",
+  Unpaid: "unpaid",
+  Other: "other",
+} as const;
+export type PtoType = (typeof PtoType)[keyof typeof PtoType];
+
 // ---- Employee submission --------------------------------------------------
 
 /** Payload the employee's report form POSTs to the API. */
@@ -47,6 +62,23 @@ export const CreateCorrectionRequestSchema = z.object({
   affirmed: z.boolean().refine((v) => v === true, "You must affirm the information is correct"),
 });
 export type CreateCorrectionRequest = z.infer<typeof CreateCorrectionRequestSchema>;
+
+/** Payload the employee's time-off (PTO) form POSTs to the API. */
+export const CreatePtoRequestSchema = z
+  .object({
+    employeeName: z.string().min(1, "Name is required").max(120),
+    jibblePersonId: z.string().max(120).optional(),
+    employeeEmail: z.string().email("A valid email is required"),
+    ptoType: z.enum([PtoType.Vacation, PtoType.Sick, PtoType.Unpaid, PtoType.Other]),
+    startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD"),
+    endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD"),
+    reason: z.string().min(2, "Please give a brief reason").max(1000),
+  })
+  .refine((d) => d.endDate >= d.startDate, {
+    message: "End date must be on or after the start date",
+    path: ["endDate"],
+  });
+export type CreatePtoRequest = z.infer<typeof CreatePtoRequestSchema>;
 
 /** A Jibble time entry as shown in the employee's timesheet view. */
 export interface TimesheetEntryDTO {
@@ -118,6 +150,8 @@ export interface DigitalRecord {
 
 export interface CorrectionRequestDTO {
   id: string;
+  /** "correction" (timeclock) or "timeoff" (PTO). */
+  kind: RequestKind;
   employeeName: string;
   jibblePersonId: string | null;
   jibbleEntryId: string | null;
@@ -125,6 +159,10 @@ export interface CorrectionRequestDTO {
   date: string;
   eventType: EventType;
   intendedTime: string;
+  /** PTO fields (null for corrections). */
+  ptoType: string | null;
+  startDate: string | null;
+  endDate: string | null;
   reason: string;
   status: RequestStatus;
   decisionNote: string | null;
