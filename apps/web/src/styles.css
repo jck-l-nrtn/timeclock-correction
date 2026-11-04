@@ -1078,3 +1078,7 @@ code {
 .admin-section-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
 .admin-section-title { font-size: 1.4rem; margin: 0 0 0.15rem; }
 .hist-card { opacity: 0.95; }
+
+/* Overnight / incomplete shift markers */
+.pp-next { font-size: 0.6em; color: var(--muted); vertical-align: super; margin-left: 1px; font-weight: 700; }
+.pp-missing { color: #b2541a; font-weight: 800; }

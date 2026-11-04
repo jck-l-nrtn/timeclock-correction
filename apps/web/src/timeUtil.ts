@@ -77,6 +77,60 @@ export function openPunch(entries: TimesheetEntryDTO[]): TimesheetEntryDTO | nul
   return last && isIn(last) ? last : null;
 }
 
+export interface Shift {
+  inEntry: TimesheetEntryDTO | null; // null = an out with no matching in
+  outEntry: TimesheetEntryDTO | null; // null = open, or a missed clock-out
+  /** True only for the single trailing unmatched in (currently clocked in). */
+  open: boolean;
+}
+
+/**
+ * Pair punches into shifts across day boundaries (handles overnight shifts).
+ * Walk entries in time order: each "in" opens a shift, each "out" closes it.
+ * Only the final still-open "in" is marked `open`.
+ */
+export function buildShifts(entries: TimesheetEntryDTO[]): Shift[] {
+  const sorted = [...entries].sort((a, b) => a.timeUtc.localeCompare(b.timeUtc));
+  const shifts: Shift[] = [];
+  let openIn: TimesheetEntryDTO | null = null;
+  for (const e of sorted) {
+    if (isIn(e)) {
+      if (openIn) shifts.push({ inEntry: openIn, outEntry: null, open: false }); // missed clock-out
+      openIn = e;
+    } else if (openIn) {
+      shifts.push({ inEntry: openIn, outEntry: e, open: false });
+      openIn = null;
+    } else {
+      shifts.push({ inEntry: null, outEntry: e, open: false }); // out whose in is before the range
+    }
+  }
+  if (openIn) shifts.push({ inEntry: openIn, outEntry: null, open: true });
+  return shifts;
+}
+
+/** The calendar day a shift is attributed to (its clock-in day). */
+export const shiftDay = (s: Shift): string | null =>
+  s.inEntry?.belongsToDate ?? s.outEntry?.belongsToDate ?? null;
+
+/** Hours in a completed shift (0 if open/incomplete). */
+export function shiftHours(s: Shift): number {
+  if (!s.inEntry || !s.outEntry) return 0;
+  return (new Date(s.outEntry.timeUtc).getTime() - new Date(s.inEntry.timeUtc).getTime()) / 3600000;
+}
+
+/** Group shifts by their clock-in day. */
+export function shiftsByDay(entries: TimesheetEntryDTO[]): Map<string, Shift[]> {
+  const m = new Map<string, Shift[]>();
+  for (const s of buildShifts(entries)) {
+    const d = shiftDay(s);
+    if (!d) continue;
+    const list = m.get(d) ?? [];
+    list.push(s);
+    m.set(d, list);
+  }
+  return m;
+}
+
 export interface Segment {
   in: string; // HH:mm or "—"
   out: string | null; // HH:mm, or null if still open

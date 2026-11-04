@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   EventType,
   payPeriodFor,
@@ -21,12 +21,13 @@ import {
   entryHHmm,
   fmtHM,
   fmtHoursNum,
-  groupByDay,
   hoursFor,
   openPunch,
-  pairSegments,
   parseYmd,
+  shiftHours,
+  shiftsByDay,
   todayYmd,
+  type Shift,
 } from "../timeUtil.js";
 import { CorrectionForm, type CorrectionFormInitial } from "./CorrectionForm.js";
 
@@ -34,6 +35,28 @@ const OT_WEEKLY = 40;
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const niceRange = (a: string, b: string) =>
   `${parseYmd(a).toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${parseYmd(b).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
+
+/** One shift as "in – out", with an overnight "+1" marker; "now" only if genuinely open today. */
+function ShiftSeg({ shift, day }: { shift: Shift; day: string }) {
+  const inT = shift.inEntry ? entryHHmm(shift.inEntry) : "—";
+  let out: ReactNode;
+  if (shift.outEntry) {
+    out = entryHHmm(shift.outEntry);
+  } else if (shift.open && day === todayYmd()) {
+    out = <em>now</em>;
+  } else {
+    out = <span className="pp-missing">?</span>; // missing clock-out (not currently open)
+  }
+  const overnight = shift.outEntry && shift.outEntry.belongsToDate !== day;
+  return (
+    <span className="pp-seg">
+      {inT}
+      <span className="pp-dash">–</span>
+      {out}
+      {overnight && <sup className="pp-next">+1</sup>}
+    </span>
+  );
+}
 
 type Modal =
   | { kind: "fix"; heading: string; initial: CorrectionFormInitial; original: { type: string; date: string; time: string } }
@@ -79,13 +102,15 @@ export function TimesheetPage({ profile }: { profile: EmployeeProfile }) {
     setLoading(true);
     setError(null);
     setSelected(null);
-    fetchTimesheet(period.start, period.end)
+    // Fetch one extra day on each side so overnight shifts pair across midnight.
+    fetchTimesheet(addDaysStr(period.start, -1), addDaysStr(period.end, 1))
       .then((t) => setEntries(t.entries))
       .catch((e) => setError(e instanceof Error ? e.message : "Failed to load timesheet"))
       .finally(() => setLoading(false));
   }, [period?.start, period?.end]);
 
-  const byDay = useMemo(() => groupByDay(entries ?? []), [entries]);
+  // Shifts paired across midnight, attributed to their clock-in day.
+  const byDay = useMemo(() => shiftsByDay(entries ?? []), [entries]);
   const holidayByDay = useMemo(() => new Map(holidays.map((h) => [h.date, h.name])), [holidays]);
   const pendingByDay = useMemo(() => {
     const s = new Set<string>();
@@ -104,8 +129,15 @@ export function TimesheetPage({ profile }: { profile: EmployeeProfile }) {
     return out;
   }, [period]);
 
-  const periodHours = useMemo(() => hoursFor(entries ?? []), [entries]);
-  const daysWorked = useMemo(() => [...byDay.values()].filter((l) => hoursFor(l) > 0).length, [byDay]);
+  const dayHours = (day: string) => (byDay.get(day) ?? []).reduce((sum, s) => sum + shiftHours(s), 0);
+  const periodHours = useMemo(
+    () => (period ? [...byDay.entries()].filter(([d]) => d >= period.start && d <= period.end).reduce((sum, [, ss]) => sum + ss.reduce((a, s) => a + shiftHours(s), 0), 0) : 0),
+    [byDay, period]
+  );
+  const daysWorked = useMemo(
+    () => (period ? [...byDay.entries()].filter(([d]) => d >= period.start && d <= period.end && d.length === 10).filter(([, ss]) => ss.reduce((a, s) => a + shiftHours(s), 0) > 0).length : 0),
+    [byDay, period]
+  );
   const open = openPunch(today);
   const todayHours = hoursFor(today);
   const isCurrent = offset === 0;
@@ -189,7 +221,7 @@ export function TimesheetPage({ profile }: { profile: EmployeeProfile }) {
 
       {/* Pay-period calendar */}
       {!loading && weeks.map((week) => {
-        const wHours = hoursFor(week.days.flatMap((d) => byDay.get(d) ?? []));
+        const wHours = week.days.reduce((sum, d) => sum + dayHours(d), 0);
         const ot = wHours > OT_WEEKLY;
         return (
           <section className="pp-week" key={week.start}>
@@ -199,16 +231,15 @@ export function TimesheetPage({ profile }: { profile: EmployeeProfile }) {
             </div>
             <div className="pp-grid">
               {week.days.map((d) => {
-                const list = byDay.get(d) ?? [];
-                const segs = pairSegments(list);
-                const h = hoursFor(list);
+                const dayShifts = byDay.get(d) ?? [];
+                const h = dayHours(d);
                 const dt = parseYmd(d);
                 const holiday = holidayByDay.get(d);
                 const cls = [
                   "pp-day",
                   d === todayYmd() ? "pp-today" : "",
                   selected === d ? "pp-sel" : "",
-                  h === 0 && !holiday ? "pp-empty" : "",
+                  h === 0 && !holiday && dayShifts.length === 0 ? "pp-empty" : "",
                 ].join(" ");
                 return (
                   <button key={d} className={cls} onClick={() => setSelected(selected === d ? null : d)}>
@@ -218,8 +249,8 @@ export function TimesheetPage({ profile }: { profile: EmployeeProfile }) {
                     </div>
                     <div className="pp-day-body">
                       {holiday && <span className="pp-tag tag-holiday">★ {holiday}</span>}
-                      {segs.map((s, i) => (
-                        <span key={i} className="pp-seg">{s.in}<span className="pp-dash">–</span>{s.out ?? <em>now</em>}</span>
+                      {dayShifts.map((s, i) => (
+                        <ShiftSeg key={i} shift={s} day={d} />
                       ))}
                       {pendingByDay.has(d) && <span className="pp-tag tag-pending">● pending</span>}
                     </div>
@@ -247,24 +278,31 @@ export function TimesheetPage({ profile }: { profile: EmployeeProfile }) {
             <button className="btn-link" onClick={() => setSelected(null)}>Close</button>
           </div>
           {holidayByDay.get(selected) && <p className="notice">★ {holidayByDay.get(selected)} — paid holiday.</p>}
-          {(byDay.get(selected) ?? []).length === 0 ? (
-            <p className="muted">No punches recorded this day.</p>
-          ) : (
-            <ul className="punch-list">
-              {(byDay.get(selected) ?? []).map((e) => (
-                <li key={e.id} className="punch-row">
-                  <span className={`punch-pill punch-${e.type.toLowerCase()}`}>{e.type === "In" ? "Clock in" : "Clock out"}</span>
-                  <span className="punch-time">{entryHHmm(e)}</span>
-                  {e.isManual && <span className="badge badge-approved">manual</span>}
-                  {e.isLocked ? (
-                    <span className="punch-locked muted">🔒 locked</span>
-                  ) : (
-                    <button className="btn-link" onClick={() => fix(e)}>Fix</button>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
+          {(() => {
+            const dayEntries = (byDay.get(selected) ?? [])
+              .flatMap((s) => [s.inEntry, s.outEntry])
+              .filter((e): e is TimesheetEntryDTO => Boolean(e));
+            if (dayEntries.length === 0) return <p className="muted">No punches recorded this day.</p>;
+            return (
+              <ul className="punch-list">
+                {dayEntries.map((e) => (
+                  <li key={e.id} className="punch-row">
+                    <span className={`punch-pill punch-${e.type.toLowerCase()}`}>{e.type === "In" ? "Clock in" : "Clock out"}</span>
+                    <span className="punch-time">
+                      {entryHHmm(e)}
+                      {e.belongsToDate !== selected && <span className="muted"> ({parseYmd(e.belongsToDate).toLocaleDateString(undefined, { month: "short", day: "numeric" })})</span>}
+                    </span>
+                    {e.isManual && <span className="badge badge-approved">manual</span>}
+                    {e.isLocked ? (
+                      <span className="punch-locked muted">🔒 locked</span>
+                    ) : (
+                      <button className="btn-link" onClick={() => fix(e)}>Fix</button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            );
+          })()}
           <div className="day-sheet-actions">
             <button className="btn-secondary btn-inline" onClick={() => addShift(selected)}>+ Add missing shift</button>
           </div>

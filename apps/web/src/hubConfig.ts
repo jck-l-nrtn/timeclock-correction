@@ -31,6 +31,14 @@ export interface ExternalLink {
 
 /** External tools. Set the URLs — an empty url renders as "ask your admin". */
 export const QUICK_LINKS: ExternalLink[] = [
-  { label: "Payroll", url: "", desc: "Pay stubs, W-2s, and tax info" },
-  { label: "Reimbursement form", url: "", desc: "Submit an expense for reimbursement" },
+  {
+    label: "Payroll",
+    url: "https://meridianfinancial.myfileguardian.com/hub",
+    desc: "Pay stubs, W-2s, and tax documents",
+  },
+  {
+    label: "Reimbursement form",
+    url: "https://forms.gle/caAr5LEQbSV4QyhT6",
+    desc: "Submit an expense for reimbursement",
+  },
 ];
