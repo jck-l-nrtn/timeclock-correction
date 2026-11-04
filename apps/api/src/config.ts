@@ -23,6 +23,9 @@ export const config = {
     // Fallback timezone used to compute a Jibble entry's UTC time + offset when a
     // person's own timezone can't be resolved. Montane Packaging is in Utah.
     orgTimeZone: optional("JIBBLE_ORG_TIMEZONE", "America/Denver"),
+    // Bulk PTO accrual: the hourly PTO policy to amend, and the per-hour rate.
+    ptoAccrualPolicyId: optional("PTO_ACCRUAL_POLICY_ID", "da42e824-aec4-458a-a19d-18d35408427a"),
+    ptoAccrualRate: Number(optional("PTO_ACCRUAL_RATE", "0.0385")),
     // When true, reads stay live but WRITES are simulated (no create/delete in
     // Jibble). Lets you demo the full flow without touching production data.
     dryRun: optional("JIBBLE_DRY_RUN", "") === "true",

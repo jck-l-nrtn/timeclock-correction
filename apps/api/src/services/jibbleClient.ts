@@ -122,6 +122,14 @@ export interface JibbleClient {
   getLeaveBalances(personId: string): Promise<PtoBalanceDTO[]>;
   /** A person's time-off balance change history (with comments). */
   getLeaveHistory(personId: string): Promise<LeaveHistoryDTO[]>;
+  /** Person ids assigned to a time-off policy. */
+  getPolicyAssignees(policyId: string): Promise<string[]>;
+  /** Total worked hours (paired in→out) for a person in a date range. */
+  workedHours(personId: string, from: string, to: string): Promise<number>;
+  /** Worked hours for ALL people in a range, as personId → hours (one bulk query). */
+  getWorkedHoursByPerson(from: string, to: string): Promise<Map<string, number>>;
+  /** Add a manual amendment to a person's entitlement on a policy (the comment = reason). */
+  amendEntitlement(policyId: string, personId: string, amount: number, reason: string): Promise<void>;
   /** The organization's upcoming paid holidays. */
   getUpcomingHolidays(): Promise<HolidayDTO[]>;
   /** The org's default pay-period definition. */
@@ -180,6 +188,22 @@ export class StubJibbleClient implements JibbleClient {
 
   async getLeaveHistory(): Promise<LeaveHistoryDTO[]> {
     return [];
+  }
+
+  async getPolicyAssignees(): Promise<string[]> {
+    return [];
+  }
+
+  async workedHours(): Promise<number> {
+    return 0;
+  }
+
+  async getWorkedHoursByPerson(): Promise<Map<string, number>> {
+    return new Map();
+  }
+
+  async amendEntitlement(): Promise<void> {
+    /* no-op in the stub */
   }
 
   async getUpcomingHolidays(): Promise<HolidayDTO[]> {
@@ -257,12 +281,12 @@ export class HttpJibbleClient implements JibbleClient {
   private tzCache = new Map<string, { at: number; val: string }>();
   private static readonly CACHE_TTL_MS = 5 * 60_000;
 
-  /** GET with one retry on 429 (Jibble rate limit). */
+  /** GET with backoff retries on 429 (Jibble rate limit). */
   private async jfetch(url: string): Promise<Response> {
     for (let attempt = 0; ; attempt++) {
       const res = await fetch(url, { headers: await this.authHeaders() });
-      if (res.status !== 429 || attempt >= 2) return res;
-      await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+      if (res.status !== 429 || attempt >= 4) return res;
+      await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
     }
   }
 
@@ -434,6 +458,84 @@ export class HttpJibbleClient implements JibbleClient {
       .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
   }
 
+  async getPolicyAssignees(policyId: string): Promise<string[]> {
+    const filter = encodeURIComponent(`policyId eq ${policyId}`);
+    const res = await this.jfetch(`${this.cfg.baseTimeTrackingUrl}/v1/LeaveBalances?$filter=${filter}`);
+    if (!res.ok) throw new Error(`Jibble policy assignees failed (${res.status})`);
+    const rows = ((await res.json()) as { value: Array<{ personId: string; isAssigned?: boolean }> }).value ?? [];
+    return rows.filter((r) => r.isAssigned).map((r) => r.personId);
+  }
+
+  async workedHours(personId: string, from: string, to: string): Promise<number> {
+    const entries = await this.listEntries(personId, from, to);
+    const sorted = [...entries].sort((a, b) => a.timeUtc.localeCompare(b.timeUtc));
+    let total = 0;
+    let open: TimesheetEntryDTO | null = null;
+    for (const e of sorted) {
+      if (e.type.toLowerCase() === "in") open = e;
+      else if (open) {
+        total += (new Date(e.timeUtc).getTime() - new Date(open.timeUtc).getTime()) / 3600000;
+        open = null;
+      }
+    }
+    return total;
+  }
+
+  async getWorkedHoursByPerson(from: string, to: string): Promise<Map<string, number>> {
+    const filter = encodeURIComponent(`belongsToDate ge ${from} and belongsToDate le ${to}`);
+    let url =
+      `${this.cfg.baseTimeTrackingUrl}/v1/TimeEntries?$filter=${filter}` +
+      `&$orderby=${encodeURIComponent("time asc")}&$select=personId,type,time&$top=1000`;
+    const rows: Array<{ personId: string; type: string; time: string }> = [];
+    for (let page = 0; url && page < 25; page++) {
+      const res = await this.jfetch(url);
+      if (!res.ok) throw new Error(`Jibble bulk entries failed (${res.status})`);
+      const j = (await res.json()) as {
+        value?: Array<{ personId: string; type: string; time: string }>;
+        ["@odata.nextLink"]?: string;
+      };
+      rows.push(...(j.value ?? []));
+      url = j["@odata.nextLink"] ?? "";
+    }
+    const byPerson = new Map<string, Array<{ type: string; time: string }>>();
+    for (const r of rows) {
+      const list = byPerson.get(r.personId) ?? [];
+      list.push({ type: r.type, time: r.time });
+      byPerson.set(r.personId, list);
+    }
+    const hours = new Map<string, number>();
+    for (const [pid, list] of byPerson) {
+      list.sort((a, b) => a.time.localeCompare(b.time));
+      let total = 0;
+      let open: { time: string } | null = null;
+      for (const e of list) {
+        if (e.type.toLowerCase() === "in") open = e;
+        else if (open) {
+          total += (new Date(e.time).getTime() - new Date(open.time).getTime()) / 3600000;
+          open = null;
+        }
+      }
+      hours.set(pid, total);
+    }
+    return hours;
+  }
+
+  async amendEntitlement(policyId: string, personId: string, amount: number, reason: string): Promise<void> {
+    if (this.cfg.dryRun) {
+      console.log(`[jibble DRY RUN] amend ${personId} on ${policyId}: ${amount} — "${reason}"`);
+      return;
+    }
+    const url = `${this.cfg.baseTimeTrackingUrl}/v1/TimeOffPolicies(${policyId})/Jibble.TimeTracking.Data.Entities.AmendEntitlement`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { ...(await this.authHeaders()), "Content-Type": "application/json" },
+      body: JSON.stringify({ personId, reason, amendment: amount }),
+    });
+    if (!res.ok) {
+      throw new Error(`Jibble amend failed (${res.status}): ${(await res.text()).slice(0, 200)}`);
+    }
+  }
+
   async getUpcomingHolidays(): Promise<HolidayDTO[]> {
     const url = `${this.cfg.baseWorkspaceUrl}/v1/UpcomingHolidays?$top=100`;
     const res = await fetch(url, { headers: await this.authHeaders() });
@@ -476,7 +578,7 @@ export class HttpJibbleClient implements JibbleClient {
       `${this.cfg.baseTimeTrackingUrl}/v1/TimeEntries?$filter=${filter}` +
       `&$orderby=${encodeURIComponent("time asc")}` +
       `&$select=id,type,time,offset,localTime,belongsToDate,note,isManual,isLocked,status&$top=200`;
-    const res = await fetch(url, { headers: await this.authHeaders() });
+    const res = await this.jfetch(url);
     if (!res.ok) throw new Error(`Jibble list entries failed (${res.status})`);
     const json = (await res.json()) as { value?: RawEntry[] };
     return (json.value ?? []).map((e) => ({

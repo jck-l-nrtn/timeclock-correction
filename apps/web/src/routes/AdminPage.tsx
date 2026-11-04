@@ -17,6 +17,7 @@ import { BrandHero } from "../components/Brand.js";
 import { GoogleButton } from "../components/GoogleButton.js";
 import { QueueItem } from "../components/QueueItem.js";
 import { AdminRequestsCalendar } from "../components/AdminRequestsCalendar.js";
+import { PtoAccrual } from "../components/PtoAccrual.js";
 import { summarizeRequest } from "../labels.js";
 
 /**
@@ -164,7 +165,13 @@ function AdminShell({ session, onSignOut }: { session: AdminSession; onSignOut: 
       </nav>
 
       {tab === "timeclock" && <AdminQueue kind="correction" />}
-      {tab === "timeoff" && <AdminQueue kind="timeoff" />}
+      {tab === "timeoff" && (
+        <>
+          <PtoAccrual />
+          <div style={{ height: "1.25rem" }} />
+          <AdminQueue kind="timeoff" />
+        </>
+      )}
       {tab === "org" && <OrgPeople />}
       {tab === "users" && <AdminUsers />}
     </div>

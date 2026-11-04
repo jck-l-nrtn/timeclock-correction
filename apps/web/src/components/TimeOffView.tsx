@@ -30,8 +30,9 @@ export function TimeOffView({ profile }: { profile: EmployeeProfile }) {
   };
   useEffect(load, []);
 
-  // Only show history rows that actually moved the balance, newest first.
-  const changes = (history ?? []).filter((h) => h.change !== 0 || h.description);
+  // Show only real balance amendments (the "Owed PTO" seed + accruals), hiding
+  // policy-assignment/archival noise. Newest first.
+  const changes = (history ?? []).filter((h) => h.action === "ManualAmendment");
 
   return (
     <div>

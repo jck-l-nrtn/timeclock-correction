@@ -303,6 +303,58 @@ export async function adminCreateEmployee(
   return (await res.json()) as { account: EmployeeAccount };
 }
 
+// ---- Bulk PTO accrual (master admin) --------------------------------------
+
+export interface AccrualItem {
+  personId: string;
+  name: string;
+  regHrs: number;
+  pto: number;
+  reason: string;
+}
+export interface AccrualPreview {
+  from: string;
+  to: string;
+  rate: number;
+  policyId: string;
+  items: AccrualItem[];
+}
+export interface AccrualResult {
+  personId: string;
+  name: string;
+  pto: number;
+  ok: boolean;
+  error?: string;
+}
+
+export async function previewPtoAccrual(from: string, to: string, rate?: number): Promise<AccrualPreview> {
+  const qs = new URLSearchParams({ from, to, ...(rate ? { rate: String(rate) } : {}) });
+  const res = await fetch(`/api/admin/pto-accrual/preview?${qs}`, { credentials: "include" });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new ApiError(
+      body?.error === "master_admin_only" ? "Only the master admin can run accrual." : `Preview failed (${res.status})`,
+      res.status
+    );
+  }
+  return (await res.json()) as AccrualPreview;
+}
+
+export async function applyPtoAccrual(
+  from: string,
+  to: string,
+  rate?: number
+): Promise<{ applied: number; results: AccrualResult[] }> {
+  const res = await fetch("/api/admin/pto-accrual/apply", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ from, to, ...(rate ? { rate } : {}) }),
+  });
+  if (!res.ok) throw new ApiError(`Apply failed (${res.status})`, res.status);
+  return (await res.json()) as { applied: number; results: AccrualResult[] };
+}
+
 /** Fetch the admin review queue for a given status. */
 export async function fetchAdminQueue(status = "pending"): Promise<CorrectionRequestDTO[]> {
   const res = await fetch(`/api/admin/requests?status=${encodeURIComponent(status)}`, {

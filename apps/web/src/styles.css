@@ -1064,11 +1064,15 @@ code {
 .review-actions .btn-primary, .review-actions .btn-danger { padding: 0.5rem 1.4rem; }
 
 /* ===== PTO balance history ledger ===== */
-.ledger { list-style: none; padding: 0; margin: 1rem 0 0; display: flex; flex-direction: column; }
-.ledger-row { display: flex; align-items: center; gap: 1rem; padding: 0.7rem 0; border-top: 1px solid var(--border); }
+.ledger {
+  list-style: none; padding: 0; margin: 1rem 0 0; display: flex; flex-direction: column;
+  max-height: 360px; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--border); border-radius: 12px;
+}
+.ledger-row { display: flex; align-items: center; gap: 1rem; padding: 0.7rem 0.9rem; border-top: 1px solid var(--border); }
 .ledger-row:first-child { border-top: none; }
 .ledger-main { flex: 1; min-width: 0; }
-.ledger-desc { font-size: 0.95rem; color: var(--text); }
+.ledger-desc { font-size: 0.92rem; color: var(--text); overflow-wrap: anywhere; }
 .ledger-meta { font-size: 0.8rem; margin-top: 0.15rem; }
 .ledger-amt { font-weight: 800; font-family: "Archivo", sans-serif; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .amt-pos { color: #1f8f4e; }
@@ -1082,3 +1086,13 @@ code {
 /* Overnight / incomplete shift markers */
 .pp-next { font-size: 0.6em; color: var(--muted); vertical-align: super; margin-left: 1px; font-weight: 700; }
 .pp-missing { color: #b2541a; font-weight: 800; }
+
+/* ===== PTO accrual table ===== */
+.accrual-table-wrap { margin-top: 1rem; max-height: 420px; overflow-y: auto; border: 1px solid var(--border); border-radius: 12px; }
+.accrual-table { width: 100%; border-collapse: collapse; }
+.accrual-table th { position: sticky; top: 0; background: var(--surface-2); text-align: left; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); padding: 0.55rem 0.8rem; border-bottom: 2px solid var(--border); }
+.accrual-table td { padding: 0.55rem 0.8rem; border-bottom: 1px solid var(--border); }
+.accrual-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.accrual-pto { font-weight: 800; font-family: "Archivo", sans-serif; color: #1f8f4e; }
+.accrual-skip { opacity: 0.5; }
+.accrual-sample { margin: 0.75rem 0.2rem 0; font-style: italic; font-size: 0.82rem; }
