@@ -526,7 +526,9 @@ export class HttpJibbleClient implements JibbleClient {
       console.log(`[jibble DRY RUN] amend ${personId} on ${policyId}: ${amount} — "${reason}"`);
       return;
     }
-    const url = `${this.cfg.baseTimeTrackingUrl}/v1/TimeOffPolicies(${policyId})/Jibble.TimeTracking.Data.Entities.AmendEntitlement`;
+    // The AmendEntitlement action lives in the "Default" OData namespace (ASP.NET
+    // OData), not the entity's namespace — using the wrong one 404s.
+    const url = `${this.cfg.baseTimeTrackingUrl}/v1/TimeOffPolicies(${policyId})/Default.AmendEntitlement`;
     const res = await fetch(url, {
       method: "POST",
       headers: { ...(await this.authHeaders()), "Content-Type": "application/json" },

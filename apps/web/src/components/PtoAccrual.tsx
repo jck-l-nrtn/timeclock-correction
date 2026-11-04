@@ -171,6 +171,18 @@ export function PtoAccrual() {
         </div>
       )}
 
+      {results && (() => {
+        const failed = results.filter((r) => !r.ok);
+        return (
+          <>
+            {failed.length > 0 && (
+              <p className="error-banner">
+                {failed.length} failed. First error: {failed[0].error ?? "unknown"}
+              </p>
+            )}
+          </>
+        );
+      })()}
       {results && (
         <div className="accrual-table-wrap">
           <p className="flash">Applied PTO to {results.filter((r) => r.ok && r.pto > 0).length} employees.</p>

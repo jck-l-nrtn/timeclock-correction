@@ -358,7 +358,8 @@ adminRouter.post("/pto-accrual/apply", requireMaster, async (req, res) => {
       await jibbleClient.amendEntitlement(plan.policyId, item.personId, item.pto, item.reason);
       results.push({ personId: item.personId, name: item.name, pto: item.pto, ok: true });
     } catch (err) {
-      results.push({ personId: item.personId, name: item.name, pto: item.pto, ok: false, error: String(err).slice(0, 160) });
+      console.error(`[admin] amend failed for ${item.name} <${item.personId}>:`, err);
+      results.push({ personId: item.personId, name: item.name, pto: item.pto, ok: false, error: String(err).slice(0, 300) });
     }
   }
   return res.json({ from, to, rate, applied: results.filter((r) => r.ok && r.pto > 0).length, results });
