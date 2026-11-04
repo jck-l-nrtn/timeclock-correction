@@ -91,6 +91,27 @@ adminRouter.post("/employees", requireMaster, async (req, res) => {
 });
 
 /**
+ * POST /api/admin/employees/manual { email, fullName, isAdmin? }
+ * Add someone who is NOT in Jibble (email + name only, no timesheet link).
+ * They can sign in with Google and be placed in the org chart. Master-admin only.
+ */
+adminRouter.post("/employees/manual", requireMaster, async (req, res) => {
+  const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+  const fullName = typeof req.body?.fullName === "string" ? req.body.fullName.trim() : "";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: "invalid_email" });
+  if (!fullName) return res.status(400).json({ error: "name_required" });
+  if (await data.getPersonByEmail(email)) return res.status(409).json({ error: "account_exists" });
+
+  const created = await data.upsertPerson({
+    email,
+    fullName,
+    jibblePersonId: null,
+    isAdmin: req.body?.isAdmin === true,
+  });
+  return res.status(201).json({ account: personView(created) });
+});
+
+/**
  * POST /api/admin/employees/bulk-create
  * Provision an SSO-ready account for every Jibble person with an email that
  * doesn't already have one. Master-admin only.
@@ -131,6 +152,9 @@ adminRouter.put("/people/:email", requireMaster, async (req, res) => {
   }
   if (typeof req.body?.isAdmin === "boolean") {
     await data.setPersonAdmin(existing.email, req.body.isAdmin);
+  }
+  if (typeof req.body?.active === "boolean") {
+    await data.setPersonActive(existing.email, req.body.active);
   }
   const updated = await data.getPersonByEmail(existing.email);
   return res.json(personView(updated!));

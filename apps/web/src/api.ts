@@ -247,7 +247,7 @@ export async function fetchPeople(): Promise<EmployeeAccount[]> {
 /** Master-admin: set a person's approver and/or admin flag. */
 export async function updatePerson(
   email: string,
-  patch: { managerEmail?: string | null; isAdmin?: boolean }
+  patch: { managerEmail?: string | null; isAdmin?: boolean; active?: boolean }
 ): Promise<EmployeeAccount> {
   const res = await fetch(`/api/admin/people/${encodeURIComponent(email)}`, {
     method: "PUT",
@@ -277,6 +277,33 @@ export async function adminListEmployees(): Promise<EmployeeAccount[]> {
   const res = await fetch("/api/admin/employees", { credentials: "include" });
   if (!res.ok) throw new ApiError(`Failed to load accounts (${res.status})`, res.status);
   return (await res.json()) as EmployeeAccount[];
+}
+
+/** Master-admin: add someone NOT in Jibble (email + name, no timesheet link). */
+export async function adminCreateManual(
+  email: string,
+  fullName: string,
+  isAdmin?: boolean
+): Promise<{ account: EmployeeAccount }> {
+  const res = await fetch("/api/admin/employees/manual", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ email, fullName, isAdmin: Boolean(isAdmin) }),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    const msg =
+      body?.error === "account_exists"
+        ? "An account with that email already exists."
+        : body?.error === "invalid_email"
+          ? "Enter a valid email."
+          : body?.error === "name_required"
+            ? "Enter a name."
+            : `Failed (${res.status})`;
+    throw new ApiError(msg, res.status);
+  }
+  return (await res.json()) as { account: EmployeeAccount };
 }
 
 /** Master-admin: provision SSO-ready accounts for all Jibble people at once. */

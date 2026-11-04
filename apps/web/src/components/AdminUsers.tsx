@@ -3,8 +3,10 @@ import {
   ApiError,
   adminBulkCreateEmployees,
   adminCreateEmployee,
+  adminCreateManual,
   adminListEmployees,
   adminListJibblePeople,
+  updatePerson,
   type EmployeeAccount,
   type JibblePersonSummary,
 } from "../api.js";
@@ -24,6 +26,12 @@ export function AdminUsers() {
   const [created, setCreated] = useState<EmployeeAccount | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkMsg, setBulkMsg] = useState<string | null>(null);
+  const [mEmail, setMEmail] = useState("");
+  const [mName, setMName] = useState("");
+  const [mAdmin, setMAdmin] = useState(false);
+  const [mBusy, setMBusy] = useState(false);
+  const [archiving, setArchiving] = useState<string | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
 
   const load = useCallback(() => {
     adminListJibblePeople()
@@ -58,6 +66,37 @@ export function AdminUsers() {
       setError(err instanceof ApiError ? err.message : "Bulk create failed");
     } finally {
       setBulkBusy(false);
+    }
+  }
+
+  async function setActive(email: string, active: boolean) {
+    setArchiving(email);
+    setError(null);
+    try {
+      await updatePerson(email, { active });
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed");
+    } finally {
+      setArchiving(null);
+    }
+  }
+
+  async function createManual() {
+    if (!mEmail.trim() || !mName.trim()) return;
+    setMBusy(true);
+    setError(null);
+    try {
+      const res = await adminCreateManual(mEmail.trim(), mName.trim(), mAdmin);
+      setCreated(res.account);
+      setMEmail("");
+      setMName("");
+      setMAdmin(false);
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to add person");
+    } finally {
+      setMBusy(false);
     }
   }
 
@@ -131,24 +170,68 @@ export function AdminUsers() {
         {busy ? "Adding…" : "Add person"}
       </button>
 
-      <h3 style={{ marginTop: "1.75rem" }}>Accounts ({accounts?.length ?? 0})</h3>
-      {accounts && accounts.length === 0 && <p className="muted">No accounts yet.</p>}
-      {accounts && accounts.length > 0 && (
-        <ul className="request-list">
-          {accounts.map((a) => (
-            <li key={a.id} className="request-item">
-              <div className="request-main">
-                <div className="request-title">
-                  {a.fullName}
-                  {a.isAdmin ? " · admin" : ""}
-                </div>
-                <div className="muted">{a.email}</div>
-              </div>
-              <span className="badge badge-approved">{a.active ? "active" : "inactive"}</span>
-            </li>
-          ))}
-        </ul>
-      )}
+      <h3 style={{ marginTop: "1.75rem" }}>Not in Jibble?</h3>
+      <p className="muted">Add a manager or office staff member who doesn't clock in — they can still sign in and approve requests.</p>
+      <div className="row">
+        <label className="field">
+          <span className="field-label">Full name</span>
+          <input value={mName} onChange={(e) => setMName(e.target.value)} placeholder="Jane Doe" />
+        </label>
+        <label className="field">
+          <span className="field-label">Email (their Google login)</span>
+          <input type="email" value={mEmail} onChange={(e) => setMEmail(e.target.value)} placeholder="jane@…" />
+        </label>
+      </div>
+      <label className="org-toggle" style={{ margin: "0.25rem 0 1rem" }}>
+        <input type="checkbox" checked={mAdmin} onChange={(e) => setMAdmin(e.target.checked)} />
+        <span>Grant admin access</span>
+      </label>
+      <button className="btn-secondary" disabled={mBusy || !mEmail.trim() || !mName.trim()} onClick={createManual}>
+        {mBusy ? "Adding…" : "Add non-Jibble person"}
+      </button>
+
+      {(() => {
+        const list = accounts ?? [];
+        const active = list.filter((a) => a.active);
+        const archived = list.filter((a) => !a.active);
+        const shown = showArchived ? [...active, ...archived] : active;
+        return (
+          <>
+            <div className="cal-head" style={{ marginTop: "1.75rem" }}>
+              <h3 style={{ margin: 0 }}>Accounts ({active.length})</h3>
+              {archived.length > 0 && (
+                <button className="btn-link" onClick={() => setShowArchived((s) => !s)}>
+                  {showArchived ? "Hide" : "Show"} archived ({archived.length})
+                </button>
+              )}
+            </div>
+            {list.length === 0 && <p className="muted">No accounts yet.</p>}
+            {shown.length > 0 && (
+              <ul className="request-list">
+                {shown.map((a) => (
+                  <li key={a.id} className={`request-item ${a.active ? "" : "acct-archived"}`}>
+                    <div className="request-main">
+                      <div className="request-title">
+                        {a.fullName}
+                        {a.isAdmin ? " · admin" : ""}
+                        {!a.jibblePersonId ? " · no Jibble" : ""}
+                      </div>
+                      <div className="muted">{a.email}</div>
+                    </div>
+                    <button
+                      className="btn-link"
+                      disabled={archiving === a.email}
+                      onClick={() => setActive(a.email, !a.active)}
+                    >
+                      {archiving === a.email ? "…" : a.active ? "Archive" : "Restore"}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
+        );
+      })()}
     </section>
   );
 }

@@ -127,6 +127,7 @@ export async function upsertPerson(input: {
   isAdmin?: boolean;
   managerEmail?: string | null;
   timeZone?: string | null;
+  active?: boolean;
 }): Promise<EmployeeItem> {
   const existing = await getEmployeeByEmail(input.email);
   const item: EmployeeItem = existing
@@ -138,6 +139,7 @@ export async function upsertPerson(input: {
         managerEmail:
           input.managerEmail !== undefined ? input.managerEmail : existing.managerEmail ?? null,
         timeZone: input.timeZone ?? existing.timeZone ?? null,
+        active: input.active ?? existing.active ?? true,
       }
     : {
         id: randomUUID(),
@@ -178,6 +180,16 @@ export async function setPersonAdmin(
   const p = await getEmployeeByEmail(email);
   if (!p) return null;
   return upsertPerson({ email: p.email, isAdmin });
+}
+
+/** Archive (deactivate) or restore an account. Archived users can't sign in. */
+export async function setPersonActive(
+  email: string,
+  active: boolean
+): Promise<EmployeeItem | null> {
+  const p = await getEmployeeByEmail(email);
+  if (!p) return null;
+  return upsertPerson({ email: p.email, active });
 }
 
 /** All Person/account rows (low-volume table → Scan with a filter is fine). */

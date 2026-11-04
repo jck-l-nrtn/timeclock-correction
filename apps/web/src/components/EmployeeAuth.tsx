@@ -5,6 +5,7 @@ import { GoogleButton } from "./GoogleButton.js";
 const LOGIN_ERRORS: Record<string, string> = {
   not_recognized:
     "We couldn't find you in the system yet. Ask your manager to add you, then try again.",
+  account_disabled: "This account has been archived. Contact your admin.",
   email_unverified: "Your Google email isn't verified. Verify it with Google and try again.",
   sso_not_configured: "Google sign-in isn't set up yet. Please contact your admin.",
   google_denied: "Google sign-in was cancelled.",

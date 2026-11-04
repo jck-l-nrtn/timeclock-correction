@@ -113,6 +113,9 @@ googleAuthRouter.get("/callback", async (req, res) => {
     if (!person && !isMaster(email)) {
       return res.redirect(appUrl("/?login_error=not_recognized"));
     }
+    if (person && person.active === false) {
+      return res.redirect(appUrl("/?login_error=account_disabled"));
+    }
 
     // 4. Issue the unified session and land them on the right surface.
     issueSession(res, email);

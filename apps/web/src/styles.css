@@ -1119,3 +1119,5 @@ code {
 
 /* Bulk create box */
 .bulk-box { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; background: var(--accent-tint); border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.1rem; margin-bottom: 1rem; }
+
+.acct-archived { opacity: 0.55; }
