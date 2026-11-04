@@ -307,3 +307,18 @@ export function stepPayPeriod(def: PayPeriodDef, period: PayPeriod, n: number): 
   const start = addDaysStr(period.start, n * period.length);
   return { start, end: addDaysStr(start, period.length - 1), length: period.length, index: period.index + n };
 }
+
+/** The date a pay period's accrual opens: the first Tuesday strictly after it ends. */
+export function accrualOpensOn(periodEndYmd: string): string {
+  let d = addDaysStr(periodEndYmd, 1);
+  // getUTCDay: Sun=0 … Tue=2
+  for (let i = 0; i < 7 && new Date(d + "T00:00:00Z").getUTCDay() !== 2; i++) {
+    d = addDaysStr(d, 1);
+  }
+  return d;
+}
+
+/** True once accrual for a period (ending periodEndYmd) is allowed (today ≥ open date). */
+export function isAccrualOpen(periodEndYmd: string, todayYmd: string): boolean {
+  return todayYmd >= accrualOpensOn(periodEndYmd);
+}

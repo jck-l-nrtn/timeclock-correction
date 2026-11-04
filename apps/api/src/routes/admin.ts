@@ -1,5 +1,5 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
-import { AdminDecisionSchema, RequestStatus, addDaysStr } from "@timesheet/shared";
+import { AdminDecisionSchema, RequestStatus, addDaysStr, accrualOpensOn, isAccrualOpen } from "@timesheet/shared";
 import * as data from "../db/data.js";
 import { requireAdmin, isMaster } from "../services/session.js";
 import { jibbleClient } from "../services/jibbleClient.js";
@@ -216,6 +216,12 @@ adminRouter.post("/pto-accrual/apply", requireMaster, async (req, res) => {
   const to = typeof req.body?.to === "string" ? req.body.to : "";
   if (!DATE_RE.test(from) || !DATE_RE.test(to) || from > to) return res.status(400).json({ error: "invalid_range" });
   const rate = Number(req.body?.rate) > 0 ? Number(req.body.rate) : config.jibble.ptoAccrualRate;
+
+  // Accrual can only run on/after the Tuesday following the period's end.
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: config.jibble.orgTimeZone });
+  if (!isAccrualOpen(to, today)) {
+    return res.status(403).json({ error: "not_yet_open", opensOn: accrualOpensOn(to) });
+  }
 
   // Recompute server-side (never trust client amounts).
   let plan;

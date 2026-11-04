@@ -352,7 +352,15 @@ export async function applyPtoAccrual(
     credentials: "include",
     body: JSON.stringify({ from, to, ...(rate ? { rate } : {}) }),
   });
-  if (!res.ok) throw new ApiError(`Apply failed (${res.status})`, res.status);
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: string; opensOn?: string } | null;
+    throw new ApiError(
+      body?.error === "not_yet_open"
+        ? `This period's accrual opens ${body.opensOn ?? "later"}.`
+        : `Apply failed (${res.status})`,
+      res.status
+    );
+  }
   return (await res.json()) as { applied: number; results: AccrualResult[] };
 }
 
