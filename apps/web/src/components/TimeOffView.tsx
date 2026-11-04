@@ -1,43 +1,46 @@
 import { useEffect, useState } from "react";
-import type { EmployeeProfile, PtoBalanceDTO } from "../api.js";
-import { fetchMyPto } from "../api.js";
+import type { EmployeeProfile, LeaveHistoryDTO, PtoBalanceDTO } from "../api.js";
+import { fetchMyPto, fetchPtoHistory } from "../api.js";
 import { PtoForm } from "./PtoForm.js";
 
 const num = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
-// Jibble policy "kind" is "Hours" or a full-day unit ("FullDay"/"Days").
 const unitLabel = (u: string) => (u.toLowerCase().includes("hour") ? "hours" : "days");
-// Hide policies with nothing in them (e.g. unassigned-but-listed, "Do Not Use").
+const unitAbbr = (u: string) => (u.toLowerCase().includes("hour") ? "hrs" : "days");
 const meaningful = (b: { balance: number; entitled: number; taken: number; carryForward: number }) =>
   b.balance !== 0 || b.entitled !== 0 || b.taken !== 0 || b.carryForward !== 0;
 
+const fmtDate = (iso: string) =>
+  new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+
 export function TimeOffView({ profile }: { profile: EmployeeProfile }) {
   const [balances, setBalances] = useState<PtoBalanceDTO[] | null>(null);
+  const [history, setHistory] = useState<LeaveHistoryDTO[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
-  useEffect(() => {
-    let active = true;
-    fetchMyPto()
-      .then((b) => active && setBalances(b.filter(meaningful)))
-      .catch(() => active && setError(true))
-      .finally(() => active && setLoading(false));
-    return () => {
-      active = false;
-    };
-  }, []);
+  const load = () => {
+    setLoading(true);
+    Promise.all([fetchMyPto().catch(() => null), fetchPtoHistory().catch(() => null)])
+      .then(([b, h]) => {
+        if (b) setBalances(b.filter(meaningful));
+        else setError(true);
+        setHistory(h ?? []);
+      })
+      .finally(() => setLoading(false));
+  };
+  useEffect(load, []);
+
+  // Only show history rows that actually moved the balance, newest first.
+  const changes = (history ?? []).filter((h) => h.change !== 0 || h.description);
 
   return (
     <div>
       <section className="card">
         <h1>Time Off</h1>
-        <p className="muted">Your time-off balances.</p>
+        <p className="muted">Your current balances.</p>
 
-        {loading && <p className="muted">Loading your balances…</p>}
-
-        {!loading && error && (
-          <p className="notice">We couldn't load your PTO balance from Jibble right now.</p>
-        )}
-
+        {loading && <p className="muted">Loading…</p>}
+        {!loading && error && <p className="notice">We couldn't load your PTO balance from Jibble right now.</p>}
         {!loading && !error && balances && balances.length === 0 && (
           <p className="notice">No time-off policies are assigned to you yet.</p>
         )}
@@ -68,6 +71,31 @@ export function TimeOffView({ profile }: { profile: EmployeeProfile }) {
         )}
       </section>
 
+      {!loading && changes.length > 0 && (
+        <section className="card" style={{ marginTop: "1.25rem" }}>
+          <h1>Balance history</h1>
+          <p className="muted">Every change to your time-off balance, with the note attached.</p>
+          <ul className="ledger">
+            {changes.map((h) => (
+              <li key={h.id} className="ledger-row">
+                <div className="ledger-main">
+                  <div className="ledger-desc">{h.description || h.action || "Balance change"}</div>
+                  <div className="muted ledger-meta">
+                    {fmtDate(h.timestamp)} · {h.policyName}
+                  </div>
+                </div>
+                {h.change !== 0 && (
+                  <span className={`ledger-amt ${h.change > 0 ? "amt-pos" : "amt-neg"}`}>
+                    {h.change > 0 ? "+" : "−"}
+                    {num(Math.abs(h.change))} {unitAbbr(h.unit)}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <section className="card" style={{ marginTop: "1.25rem" }}>
         <h1>Request time off</h1>
         <p className="muted">Submit a request — your manager will review and approve it.</p>
@@ -75,6 +103,7 @@ export function TimeOffView({ profile }: { profile: EmployeeProfile }) {
           employeeName={profile.fullName}
           employeeEmail={profile.email}
           jibblePersonId={profile.jibblePersonId}
+          onSubmitted={load}
         />
       </section>
     </div>

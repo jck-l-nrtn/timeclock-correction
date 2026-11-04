@@ -6,10 +6,18 @@ import type {
   ProfileDetailsDTO,
   PtoBalanceDTO,
   HolidayDTO,
+  LeaveHistoryDTO,
   PayPeriodDef,
 } from "@timesheet/shared";
 
-export type { ProfileDetailsDTO, PtoBalanceDTO, HolidayDTO, PayPeriodDef };
+export type { ProfileDetailsDTO, PtoBalanceDTO, HolidayDTO, LeaveHistoryDTO, PayPeriodDef };
+
+/** All changes to the employee's time-off balance (with comments). */
+export async function fetchPtoHistory(): Promise<LeaveHistoryDTO[]> {
+  const res = await fetch("/api/employee/pto-history", { credentials: "include" });
+  if (!res.ok) throw new ApiError(`Failed to load history (${res.status})`, res.status);
+  return (await res.json()) as LeaveHistoryDTO[];
+}
 
 /** The org's pay-period definition (from Jibble, cached server-side). */
 export async function fetchPayPeriod(): Promise<PayPeriodDef> {

@@ -27,8 +27,6 @@ interface CorrectionFormProps {
   hideIdentity?: boolean;
   /** Make the date read-only (prefilled from a calendar day). */
   lockDate?: boolean;
-  /** Hide the clock-in/out/adjust selector (the caller already chose). */
-  lockEventType?: boolean;
   /** The existing punch being edited — shown so the employee sees what they're changing. */
   original?: { type: string; date: string; time: string };
   heading?: string;
@@ -48,6 +46,7 @@ function buildState(initial?: CorrectionFormInitial) {
     date: initial?.date ?? "",
     eventType: initial?.eventType ?? EventType.ClockIn,
     intendedTime: initial?.intendedTime ?? "",
+    endTime: "",
     reason: initial?.reason ?? "",
     affirmed: false,
   };
@@ -59,7 +58,6 @@ export function CorrectionForm({
   lockEmail,
   hideIdentity,
   lockDate,
-  lockEventType,
   original,
   heading = "Report a missed timeclock",
   subheading = "Forgot to clock in or out, or need a time corrected? Fill this out and an admin will review it.",
@@ -84,6 +82,9 @@ export function CorrectionForm({
 
     const payload = {
       ...form,
+      // A new entry is a full in→out shift; an edit changes one existing punch.
+      eventType: isEdit ? form.eventType : EventType.ClockIn,
+      endTime: isEdit ? undefined : form.endTime || undefined,
       jibblePersonId: form.jibblePersonId.trim() || undefined,
       jibbleEntryId: form.jibbleEntryId.trim() || undefined,
     };
@@ -196,38 +197,40 @@ export function CorrectionForm({
           </>
         )}
 
-        <div className="row">
-          <Field label="Date" error={errors.date}>
-            <input
-              type="date"
-              value={form.date}
-              readOnly={lockDate}
-              onChange={(e) => update("date", e.target.value)}
-            />
-          </Field>
-          <Field
-            label={isEdit ? "Corrected time" : form.eventType === EventType.ClockIn ? "Clock-in time" : form.eventType === EventType.ClockOut ? "Clock-out time" : "Intended time"}
-            error={errors.intendedTime}
-          >
+        <Field label="Date" error={errors.date}>
+          <input
+            type="date"
+            value={form.date}
+            readOnly={lockDate}
+            onChange={(e) => update("date", e.target.value)}
+          />
+        </Field>
+
+        {isEdit ? (
+          <Field label="Corrected time" error={errors.intendedTime}>
             <input
               type="time"
               value={form.intendedTime}
               onChange={(e) => update("intendedTime", e.target.value)}
             />
           </Field>
-        </div>
-
-        {!isEdit && !lockEventType && (
-          <Field label="What happened?" error={errors.eventType}>
-            <select
-              value={form.eventType}
-              onChange={(e) => update("eventType", e.target.value as EventType)}
-            >
-              <option value={EventType.ClockIn}>Missed clock-IN</option>
-              <option value={EventType.ClockOut}>Missed clock-OUT</option>
-              <option value={EventType.Adjustment}>Time adjustment</option>
-            </select>
-          </Field>
+        ) : (
+          <div className="row">
+            <Field label="Clock-in time" error={errors.intendedTime}>
+              <input
+                type="time"
+                value={form.intendedTime}
+                onChange={(e) => update("intendedTime", e.target.value)}
+              />
+            </Field>
+            <Field label="Clock-out time" error={errors.endTime}>
+              <input
+                type="time"
+                value={form.endTime}
+                onChange={(e) => update("endTime", e.target.value)}
+              />
+            </Field>
+          </div>
         )}
 
         <Field label="Reason" error={errors.reason}>

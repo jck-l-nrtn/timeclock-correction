@@ -61,6 +61,7 @@ requestsRouter.post("/", async (req, res) => {
     date: input.date,
     eventType: input.eventType,
     intendedTime: input.intendedTime,
+    endTime: input.endTime ?? null,
     reason: input.reason,
     affirmed: input.affirmed,
   });

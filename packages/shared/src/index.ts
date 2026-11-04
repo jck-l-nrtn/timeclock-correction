@@ -42,25 +42,40 @@ export type PtoType = (typeof PtoType)[keyof typeof PtoType];
 // ---- Employee submission --------------------------------------------------
 
 /** Payload the employee's report form POSTs to the API. */
-export const CreateCorrectionRequestSchema = z.object({
-  employeeName: z.string().min(1, "Name is required").max(120),
-  /** Jibble person id if known; otherwise resolved server-side from email. */
-  jibblePersonId: z.string().max(120).optional(),
-  employeeEmail: z.string().email("A valid email is required"),
-  /**
-   * Jibble time-entry id being changed, when the request targets an existing
-   * entry (an edit). Omitted for a brand-new / missed entry.
-   */
-  jibbleEntryId: z.string().max(120).optional(),
-  /** ISO date (YYYY-MM-DD) the missed/adjusted event applies to. */
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD"),
-  eventType: z.enum([EventType.ClockIn, EventType.ClockOut, EventType.Adjustment]),
-  /** Intended local time of the event, HH:mm (24h). */
-  intendedTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Expected HH:mm"),
-  reason: z.string().min(3, "Please give a brief reason").max(1000),
-  /** Must be checked: "I affirm the above information is correct." */
-  affirmed: z.boolean().refine((v) => v === true, "You must affirm the information is correct"),
-});
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+export const CreateCorrectionRequestSchema = z
+  .object({
+    employeeName: z.string().min(1, "Name is required").max(120),
+    /** Jibble person id if known; otherwise resolved server-side from email. */
+    jibblePersonId: z.string().max(120).optional(),
+    employeeEmail: z.string().email("A valid email is required"),
+    /**
+     * Jibble time-entry id being changed, when the request targets an existing
+     * entry (an edit). Omitted for a brand-new missed shift.
+     */
+    jibbleEntryId: z.string().max(120).optional(),
+    /** ISO date (YYYY-MM-DD) the missed/adjusted event applies to. */
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD"),
+    eventType: z.enum([EventType.ClockIn, EventType.ClockOut, EventType.Adjustment]),
+    /** For an edit: the corrected time. For a new shift: the clock-IN time. HH:mm. */
+    intendedTime: z.string().regex(HHMM, "Expected HH:mm"),
+    /**
+     * Clock-OUT time for a new missed shift (HH:mm). A new entry is always a full
+     * in→out shift so Jibble never gets an orphan punch. Null for edits.
+     */
+    endTime: z.string().regex(HHMM, "Expected HH:mm").nullish(),
+    reason: z.string().min(3, "Please give a brief reason").max(1000),
+    /** Must be checked: "I affirm the above information is correct." */
+    affirmed: z.boolean().refine((v) => v === true, "You must affirm the information is correct"),
+  })
+  .refine((d) => d.jibbleEntryId || d.endTime, {
+    message: "A new missed shift needs both a clock-in and a clock-out time",
+    path: ["endTime"],
+  })
+  .refine((d) => !d.endTime || d.endTime > d.intendedTime, {
+    message: "Clock-out must be after clock-in",
+    path: ["endTime"],
+  });
 export type CreateCorrectionRequest = z.infer<typeof CreateCorrectionRequestSchema>;
 
 /** Payload the employee's time-off (PTO) form POSTs to the API. */
@@ -161,6 +176,8 @@ export interface CorrectionRequestDTO {
   date: string;
   eventType: EventType;
   intendedTime: string;
+  /** Clock-out time for a new missed shift (null for edits/PTO). */
+  endTime: string | null;
   /** PTO fields (null for corrections). */
   ptoType: string | null;
   startDate: string | null;
@@ -206,6 +223,22 @@ export interface PtoBalanceDTO {
   taken: number;
   balance: number;
   carryForward: number;
+}
+
+/** One change to a person's time-off balance (from Jibble TimeOffHistories). */
+export interface LeaveHistoryDTO {
+  id: string;
+  policyId: string;
+  policyName: string;
+  /** ISO timestamp of the change. */
+  timestamp: string;
+  /** Signed amount the balance changed by (hours or days per the policy). */
+  change: number;
+  /** Jibble action type (Accrual, Amendment, TimeOff, PolicyCompliance, …). */
+  action: string;
+  /** Human-readable comment attached to the change. */
+  description: string;
+  unit: string;
 }
 
 /** A company paid holiday. */

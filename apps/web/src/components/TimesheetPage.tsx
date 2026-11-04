@@ -11,13 +11,11 @@ import {
 } from "@timesheet/shared";
 import {
   fetchHolidays,
-  fetchMyPto,
   fetchMyRequests,
   fetchPayPeriod,
   fetchTimesheet,
   type EmployeeProfile,
   type PayPeriodDef,
-  type PtoBalanceDTO,
 } from "../api.js";
 import {
   entryHHmm,
@@ -31,18 +29,15 @@ import {
   todayYmd,
 } from "../timeUtil.js";
 import { CorrectionForm, type CorrectionFormInitial } from "./CorrectionForm.js";
-import { PtoForm } from "./PtoForm.js";
 
 const OT_WEEKLY = 40;
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const niceRange = (a: string, b: string) =>
   `${parseYmd(a).toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${parseYmd(b).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
-const titleCase = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 type Modal =
   | { kind: "fix"; heading: string; initial: CorrectionFormInitial; original: { type: string; date: string; time: string } }
   | { kind: "add"; heading: string; initial: CorrectionFormInitial }
-  | { kind: "timeoff"; date: string }
   | null;
 
 export function TimesheetPage({ profile }: { profile: EmployeeProfile }) {
@@ -50,7 +45,6 @@ export function TimesheetPage({ profile }: { profile: EmployeeProfile }) {
   const [offset, setOffset] = useState(0);
   const [entries, setEntries] = useState<TimesheetEntryDTO[] | null>(null);
   const [today, setToday] = useState<TimesheetEntryDTO[]>([]);
-  const [balances, setBalances] = useState<PtoBalanceDTO[]>([]);
   const [holidays, setHolidays] = useState<HolidayDTO[]>([]);
   const [requests, setRequests] = useState<CorrectionRequestDTO[]>([]);
   const [loading, setLoading] = useState(true);
@@ -61,14 +55,12 @@ export function TimesheetPage({ profile }: { profile: EmployeeProfile }) {
   useEffect(() => {
     Promise.all([
       fetchPayPeriod(),
-      fetchMyPto().catch(() => []),
       fetchTimesheet(todayYmd(), todayYmd()).catch(() => null),
       fetchHolidays().catch(() => []),
       fetchMyRequests().catch(() => []),
     ])
-      .then(([d, bals, t, hols, reqs]) => {
+      .then(([d, t, hols, reqs]) => {
         setDef(d);
-        setBalances(bals);
         setToday(t?.entries ?? []);
         setHolidays(hols);
         setRequests(reqs);
@@ -95,19 +87,6 @@ export function TimesheetPage({ profile }: { profile: EmployeeProfile }) {
 
   const byDay = useMemo(() => groupByDay(entries ?? []), [entries]);
   const holidayByDay = useMemo(() => new Map(holidays.map((h) => [h.date, h.name])), [holidays]);
-  const timeOffByDay = useMemo(() => {
-    const m = new Map<string, { ptoType: string; status: string }>();
-    for (const r of requests) {
-      if (r.kind !== "timeoff" || r.status === "denied" || !r.startDate) continue;
-      let d = r.startDate;
-      const end = r.endDate || r.startDate;
-      while (d <= end) {
-        m.set(d, { ptoType: r.ptoType ?? "time off", status: r.status });
-        d = addDaysStr(d, 1);
-      }
-    }
-    return m;
-  }, [requests]);
   const pendingByDay = useMemo(() => {
     const s = new Set<string>();
     for (const r of requests) if (r.kind === "correction" && r.status === "pending" && r.date) s.add(r.date);
@@ -127,10 +106,6 @@ export function TimesheetPage({ profile }: { profile: EmployeeProfile }) {
 
   const periodHours = useMemo(() => hoursFor(entries ?? []), [entries]);
   const daysWorked = useMemo(() => [...byDay.values()].filter((l) => hoursFor(l) > 0).length, [byDay]);
-  const topPto = useMemo(
-    () => balances.filter((b) => b.balance > 0).sort((a, b) => b.balance - a.balance)[0] ?? null,
-    [balances]
-  );
   const open = openPunch(today);
   const todayHours = hoursFor(today);
   const isCurrent = offset === 0;
@@ -151,16 +126,15 @@ export function TimesheetPage({ profile }: { profile: EmployeeProfile }) {
         intendedTime: entryHHmm(e),
       },
     });
-  const add = (day: string, type: EventType) =>
+  const addShift = (day: string) =>
     setModal({
       kind: "add",
-      heading: type === EventType.ClockIn ? "Add a missing clock-in" : "Add a missing clock-out",
+      heading: "Add a missing shift",
       initial: {
         employeeName: profile.fullName,
         employeeEmail: profile.email,
         jibblePersonId: profile.jibblePersonId ?? undefined,
         date: day,
-        eventType: type,
       },
     });
 
@@ -209,10 +183,6 @@ export function TimesheetPage({ profile }: { profile: EmployeeProfile }) {
           <div className="stat-big">{fmtHoursNum(daysWorked ? periodHours / daysWorked : 0)}</div>
           <div className="stat-cap">avg hours / day</div>
         </div>
-        <div className="stat-card">
-          <div className="stat-big">{topPto ? fmtHoursNum(topPto.balance) : "—"}</div>
-          <div className="stat-cap">{topPto ? `${topPto.unit.toLowerCase().includes("hour") ? "hrs" : "days"} · ${topPto.policyName}` : "PTO available"}</div>
-        </div>
       </div>
 
       {loading && <p className="muted">Loading timesheet…</p>}
@@ -234,12 +204,11 @@ export function TimesheetPage({ profile }: { profile: EmployeeProfile }) {
                 const h = hoursFor(list);
                 const dt = parseYmd(d);
                 const holiday = holidayByDay.get(d);
-                const to = timeOffByDay.get(d);
                 const cls = [
                   "pp-day",
                   d === todayYmd() ? "pp-today" : "",
                   selected === d ? "pp-sel" : "",
-                  h === 0 && !holiday && !to ? "pp-empty" : "",
+                  h === 0 && !holiday ? "pp-empty" : "",
                 ].join(" ");
                 return (
                   <button key={d} className={cls} onClick={() => setSelected(selected === d ? null : d)}>
@@ -249,7 +218,6 @@ export function TimesheetPage({ profile }: { profile: EmployeeProfile }) {
                     </div>
                     <div className="pp-day-body">
                       {holiday && <span className="pp-tag tag-holiday">★ {holiday}</span>}
-                      {to && <span className={`pp-tag ${to.status === "pending" ? "tag-pto-pending" : "tag-pto"}`}>{titleCase(to.ptoType)}</span>}
                       {segs.map((s, i) => (
                         <span key={i} className="pp-seg">{s.in}<span className="pp-dash">–</span>{s.out ?? <em>now</em>}</span>
                       ))}
@@ -279,9 +247,6 @@ export function TimesheetPage({ profile }: { profile: EmployeeProfile }) {
             <button className="btn-link" onClick={() => setSelected(null)}>Close</button>
           </div>
           {holidayByDay.get(selected) && <p className="notice">★ {holidayByDay.get(selected)} — paid holiday.</p>}
-          {timeOffByDay.get(selected) && (
-            <p className="notice">{titleCase(timeOffByDay.get(selected)!.ptoType)} time off ({timeOffByDay.get(selected)!.status === "pending" ? "pending" : "approved"}).</p>
-          )}
           {(byDay.get(selected) ?? []).length === 0 ? (
             <p className="muted">No punches recorded this day.</p>
           ) : (
@@ -301,9 +266,7 @@ export function TimesheetPage({ profile }: { profile: EmployeeProfile }) {
             </ul>
           )}
           <div className="day-sheet-actions">
-            <button className="btn-secondary btn-inline" onClick={() => add(selected, EventType.ClockIn)}>+ Clock-in</button>
-            <button className="btn-secondary btn-inline" onClick={() => add(selected, EventType.ClockOut)}>+ Clock-out</button>
-            <button className="btn-secondary btn-inline" onClick={() => setModal({ kind: "timeoff", date: selected })}>Request time off</button>
+            <button className="btn-secondary btn-inline" onClick={() => addShift(selected)}>+ Add missing shift</button>
           </div>
         </section>
       )}
@@ -311,36 +274,23 @@ export function TimesheetPage({ profile }: { profile: EmployeeProfile }) {
       {modal && (
         <div className="modal-overlay" onClick={() => setModal(null)}>
           <div className="modal-body" onClick={(e) => e.stopPropagation()}>
-            {modal.kind === "timeoff" ? (
-              <div className="card">
-                <h1>Request time off</h1>
-                <p className="muted">Your manager will review and approve it.</p>
-                <PtoForm
-                  employeeName={profile.fullName}
-                  employeeEmail={profile.email}
-                  jibblePersonId={profile.jibblePersonId}
-                  initialStart={modal.date}
-                  initialEnd={modal.date}
-                  onSubmitted={reloadRequests}
-                />
-                <button className="btn-secondary btn-inline" style={{ marginTop: "0.75rem" }} onClick={() => setModal(null)}>Close</button>
-              </div>
-            ) : (
-              <CorrectionForm
-                heading={modal.heading}
-                subheading="Your manager reviews this; approved changes update your timesheet."
-                hideIdentity
-                lockDate
-                lockEventType={modal.kind === "add"}
-                original={modal.kind === "fix" ? modal.original : undefined}
-                initial={modal.initial}
-                onCancel={() => setModal(null)}
-                onSubmitted={() => {
-                  setModal(null);
-                  reloadAll();
-                }}
-              />
-            )}
+            <CorrectionForm
+              heading={modal.heading}
+              subheading={
+                modal.kind === "add"
+                  ? "Add the full shift you worked — both clock-in and clock-out. Your manager reviews it."
+                  : "Your manager reviews this; approved changes update your timesheet."
+              }
+              hideIdentity
+              lockDate
+              original={modal.kind === "fix" ? modal.original : undefined}
+              initial={modal.initial}
+              onCancel={() => setModal(null)}
+              onSubmitted={() => {
+                setModal(null);
+                reloadAll();
+              }}
+            />
           </div>
         </div>
       )}

@@ -103,7 +103,7 @@ ok(
   (await fetch(`${base}/api/requests`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ date: "2026-06-20", eventType: "out", intendedTime: "17:00", reason: "x", affirmed: true }),
+    body: JSON.stringify({ date: "2026-06-20", eventType: "in", intendedTime: "08:00", endTime: "17:00", reason: "x", affirmed: true }),
   })).status === 401,
   "POST /api/requests without session -> 401"
 );
@@ -113,7 +113,7 @@ const created = await j(
   await fetch(`${base}/api/requests`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Cookie: JANE },
-    body: JSON.stringify({ date: "2026-06-20", eventType: "out", intendedTime: "17:00", reason: "forgot", affirmed: true }),
+    body: JSON.stringify({ date: "2026-06-20", eventType: "in", intendedTime: "08:00", endTime: "17:00", reason: "forgot", affirmed: true }),
   })
 );
 ok(created.status === "pending" && created.employeeEmail === "jane@co.com", "submit as jane -> pending, identity from session");
@@ -127,7 +127,7 @@ const bobReq = await j(
   await fetch(`${base}/api/requests`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Cookie: BOB },
-    body: JSON.stringify({ date: "2026-06-21", eventType: "in", intendedTime: "08:00", reason: "forgot", affirmed: true }),
+    body: JSON.stringify({ date: "2026-06-21", eventType: "in", intendedTime: "08:00", endTime: "16:00", reason: "forgot", affirmed: true }),
   })
 );
 ok(bobReq.status === "pending", "bob submits -> pending");

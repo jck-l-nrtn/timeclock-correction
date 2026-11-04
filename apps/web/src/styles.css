@@ -1062,3 +1062,19 @@ code {
 .review-affirm { color: #1f8f4e; font-size: 0.85rem; margin-top: 0.4rem; font-weight: 600; }
 .review-actions { display: flex; gap: 0.6rem; margin-top: 0.9rem; }
 .review-actions .btn-primary, .review-actions .btn-danger { padding: 0.5rem 1.4rem; }
+
+/* ===== PTO balance history ledger ===== */
+.ledger { list-style: none; padding: 0; margin: 1rem 0 0; display: flex; flex-direction: column; }
+.ledger-row { display: flex; align-items: center; gap: 1rem; padding: 0.7rem 0; border-top: 1px solid var(--border); }
+.ledger-row:first-child { border-top: none; }
+.ledger-main { flex: 1; min-width: 0; }
+.ledger-desc { font-size: 0.95rem; color: var(--text); }
+.ledger-meta { font-size: 0.8rem; margin-top: 0.15rem; }
+.ledger-amt { font-weight: 800; font-family: "Archivo", sans-serif; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.amt-pos { color: #1f8f4e; }
+.amt-neg { color: #b2541a; }
+
+/* ===== Admin section header ===== */
+.admin-section-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.admin-section-title { font-size: 1.4rem; margin: 0 0 0.15rem; }
+.hist-card { opacity: 0.95; }

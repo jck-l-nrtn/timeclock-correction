@@ -65,6 +65,24 @@ employeeRouter.get("/pto", async (req, res) => {
   }
 });
 
+/**
+ * GET /api/employee/pto-history
+ * All changes to the employee's time-off balance, with the comment on each.
+ */
+employeeRouter.get("/pto-history", async (req, res) => {
+  const emp = await resolveEmployee(req);
+  if (!emp) return res.status(401).json({ error: "unauthenticated" });
+  try {
+    const personId =
+      emp.jibblePersonId ?? (await jibbleClient.findPersonByEmail(emp.email))?.id ?? null;
+    if (!personId) return res.json([]);
+    return res.json(await jibbleClient.getLeaveHistory(personId));
+  } catch (err) {
+    console.error("[employee] pto-history lookup failed:", err);
+    return res.status(502).json({ error: "pto_history_unavailable" });
+  }
+});
+
 // Pay-period definition is org-wide and rarely changes — cache it briefly.
 let ppCache: { at: number; def: unknown } | null = null;
 /** GET /api/employee/payperiod — the org's pay-period definition (from Jibble). */

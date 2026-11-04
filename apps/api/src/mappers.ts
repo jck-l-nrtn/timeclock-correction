@@ -13,6 +13,7 @@ export function toCorrectionRequestDTO(row: RequestItem): CorrectionRequestDTO {
     date: row.date,
     eventType: row.eventType as EventType,
     intendedTime: row.intendedTime,
+    endTime: row.endTime ?? null,
     ptoType: row.ptoType ?? null,
     startDate: row.startDate ?? null,
     endDate: row.endDate ?? null,

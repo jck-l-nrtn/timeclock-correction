@@ -249,6 +249,8 @@ export interface RequestItem {
   date: string;
   eventType: string;
   intendedTime: string;
+  /** Clock-out for a new missed shift (null otherwise). */
+  endTime: string | null;
   ptoType: string | null;
   startDate: string | null;
   endDate: string | null;
@@ -304,6 +306,7 @@ export async function createRequest(input: {
   date: string;
   eventType: string;
   intendedTime: string;
+  endTime?: string | null;
   reason: string;
   affirmed: boolean;
 }): Promise<RequestItem> {
@@ -318,6 +321,7 @@ export async function createRequest(input: {
     date: input.date,
     eventType: input.eventType,
     intendedTime: input.intendedTime,
+    endTime: input.endTime ?? null,
     ptoType: null,
     startDate: null,
     endDate: null,
@@ -360,6 +364,7 @@ export async function createPtoRequest(input: {
     date: input.startDate, // for index sorting
     eventType: "adjust", // unused for PTO
     intendedTime: "00:00", // unused for PTO
+    endTime: null,
     ptoType: input.ptoType,
     startDate: input.startDate,
     endDate: input.endDate,

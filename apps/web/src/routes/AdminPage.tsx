@@ -4,6 +4,7 @@ import {
   masterLogin,
   adminLogout,
   adminMe,
+  fetchAdminLog,
   fetchAdminQueue,
   startGoogleLogin,
   submitDecision,
@@ -11,11 +12,12 @@ import {
 } from "../api.js";
 import { AdminUsers } from "../components/AdminUsers.js";
 import { OrgPeople } from "../components/OrgPeople.js";
-import { AdminLog } from "../components/AdminLog.js";
+import { StatusBadge } from "../components/StatusBadge.js";
 import { BrandHero } from "../components/Brand.js";
 import { GoogleButton } from "../components/GoogleButton.js";
 import { QueueItem } from "../components/QueueItem.js";
 import { AdminRequestsCalendar } from "../components/AdminRequestsCalendar.js";
+import { summarizeRequest } from "../labels.js";
 
 /**
  * Admin dashboard. Gate on session:
@@ -117,15 +119,16 @@ function AdminLogin({ onLogin }: { onLogin: (s: AdminSession) => void }) {
   );
 }
 
-const NAV: { id: "queue" | "log" | "org" | "users"; label: string }[] = [
-  { id: "queue", label: "Review" },
-  { id: "log", label: "Decision log" },
+type AdminTab = "timeclock" | "timeoff" | "org" | "users";
+const NAV: { id: AdminTab; label: string }[] = [
+  { id: "timeclock", label: "Timeclock" },
+  { id: "timeoff", label: "Time off" },
   { id: "org", label: "Org chart" },
   { id: "users", label: "Add people" },
 ];
 
 function AdminShell({ session, onSignOut }: { session: AdminSession; onSignOut: () => void }) {
-  const [tab, setTab] = useState<"queue" | "log" | "org" | "users">("queue");
+  const [tab, setTab] = useState<AdminTab>("timeclock");
   const initials = (session.name || "A").split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
   return (
     <div className="admin-shell">
@@ -160,33 +163,45 @@ function AdminShell({ session, onSignOut }: { session: AdminSession; onSignOut: 
         ))}
       </nav>
 
-      {tab === "queue" && <AdminQueue />}
-      {tab === "log" && <AdminLog />}
+      {tab === "timeclock" && <AdminQueue kind="correction" />}
+      {tab === "timeoff" && <AdminQueue kind="timeoff" />}
       {tab === "org" && <OrgPeople />}
       {tab === "users" && <AdminUsers />}
     </div>
   );
 }
 
-function AdminQueue() {
-  const [queue, setQueue] = useState<CorrectionRequestDTO[] | null>(null);
+function AdminQueue({ kind }: { kind: "correction" | "timeoff" }) {
+  const isTimeoff = kind === "timeoff";
+  const ofKind = useCallback(
+    (rs: CorrectionRequestDTO[]) => rs.filter((r) => (isTimeoff ? r.kind === "timeoff" : r.kind !== "timeoff")),
+    [isTimeoff]
+  );
+  const [pending, setPending] = useState<CorrectionRequestDTO[] | null>(null);
+  const [history, setHistory] = useState<CorrectionRequestDTO[] | null>(null);
+  const [view, setView] = useState<"pending" | "history">("pending");
+  const [display, setDisplay] = useState<"calendar" | "list">(isTimeoff ? "list" : "calendar");
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
-  const [mode, setMode] = useState<"calendar" | "list">("calendar");
 
-  const load = useCallback(() => {
+  const loadPending = useCallback(() => {
     fetchAdminQueue("pending")
-      .then(setQueue)
+      .then((rs) => setPending(ofKind(rs)))
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load queue"));
-  }, []);
+  }, [ofKind]);
+  useEffect(loadPending, [loadPending]);
 
-  useEffect(load, [load]);
+  function openHistory() {
+    setView("history");
+    if (!history) fetchAdminLog().then((rs) => setHistory(ofKind(rs))).catch(() => setHistory([]));
+  }
 
   async function decide(req: CorrectionRequestDTO, decision: "approved" | "denied", note: string) {
     setError(null);
     try {
       const updated = await submitDecision(req.id, decision, note.trim() || undefined);
-      setQueue((q) => (q ? q.filter((r) => r.id !== req.id) : q));
+      setPending((q) => (q ? q.filter((r) => r.id !== req.id) : q));
+      setHistory(null); // force refresh next time History opens
       setFlash(
         `${req.employeeName}'s request was ${decision}` +
           (updated.jibbleResult ? ` — ${updated.jibbleResult}` : "")
@@ -196,52 +211,73 @@ function AdminQueue() {
     }
   }
 
-  const corrections = queue?.filter((r) => r.kind !== "timeoff").length ?? 0;
-  const timeoff = queue?.filter((r) => r.kind === "timeoff").length ?? 0;
+  const title = isTimeoff ? "Time off" : "Timeclock";
+  const count = pending?.length ?? null;
 
   return (
     <div>
-      <div className="stat-cards admin-stats">
-        <div className="stat-card stat-primary">
-          <div className="stat-big">{queue?.length ?? "—"}</div>
-          <div className="stat-cap">pending requests</div>
+      <div className="admin-section-head">
+        <div>
+          <h1 className="admin-section-title">{title}</h1>
+          <p className="muted" style={{ margin: 0 }}>
+            {count === null ? "Loading…" : count === 0 ? "Nothing waiting for review." : `${count} pending ${isTimeoff ? "time-off request" : "correction"}${count === 1 ? "" : "s"}`}
+          </p>
         </div>
-        <div className="stat-card">
-          <div className="stat-big">{corrections}</div>
-          <div className="stat-cap">timeclock corrections</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-big">{timeoff}</div>
-          <div className="stat-cap">time-off requests</div>
+        <div className="seg-control seg-sm" style={{ margin: 0 }}>
+          <button className={view === "pending" ? "seg seg-on" : "seg"} onClick={() => setView("pending")}>
+            Pending{count ? ` (${count})` : ""}
+          </button>
+          <button className={view === "history" ? "seg seg-on" : "seg"} onClick={openHistory}>History</button>
         </div>
       </div>
 
-      <section className="card">
-        <div className="cal-head">
-          <h1>Review queue</h1>
-          <div className="seg-control seg-sm" style={{ margin: 0 }}>
-            <button className={mode === "calendar" ? "seg seg-on" : "seg"} onClick={() => setMode("calendar")}>Calendar</button>
-            <button className={mode === "list" ? "seg seg-on" : "seg"} onClick={() => setMode("list")}>List</button>
+      {flash && <p className="flash">{flash}</p>}
+      {error && <p className="error-banner">{error}</p>}
+
+      {view === "pending" ? (
+        <section className="card">
+          <div className="cal-head">
+            <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Review</h2>
+            <div className="seg-control seg-sm" style={{ margin: 0 }}>
+              <button className={display === "calendar" ? "seg seg-on" : "seg"} onClick={() => setDisplay("calendar")}>Calendar</button>
+              <button className={display === "list" ? "seg seg-on" : "seg"} onClick={() => setDisplay("list")}>List</button>
+            </div>
           </div>
-        </div>
-
-        {flash && <p className="flash">{flash}</p>}
-        {error && <p className="error-banner">{error}</p>}
-
-        {!queue && <p className="muted">Loading…</p>}
-        {queue && queue.length === 0 && <p className="muted">No pending requests. 🎉</p>}
-
-        {queue && queue.length > 0 && mode === "list" && (
-          <ul className="request-list">
-            {queue.map((r) => (
-              <QueueItem key={r.id} request={r} onDecide={decide} />
-            ))}
-          </ul>
-        )}
-        {queue && queue.length > 0 && mode === "calendar" && (
-          <AdminRequestsCalendar requests={queue} onDecide={decide} />
-        )}
-      </section>
+          {!pending && <p className="muted">Loading…</p>}
+          {pending && pending.length === 0 && <p className="muted">No pending {isTimeoff ? "time-off requests" : "corrections"}. 🎉</p>}
+          {pending && pending.length > 0 && display === "list" && (
+            <ul className="request-list">
+              {pending.map((r) => <QueueItem key={r.id} request={r} onDecide={decide} />)}
+            </ul>
+          )}
+          {pending && pending.length > 0 && display === "calendar" && (
+            <AdminRequestsCalendar requests={pending} onDecide={decide} />
+          )}
+        </section>
+      ) : (
+        <section className="card">
+          <h2 style={{ marginTop: 0, fontSize: "1.05rem" }}>Decision history</h2>
+          {!history && <p className="muted">Loading…</p>}
+          {history && history.length === 0 && <p className="muted">No decisions yet.</p>}
+          {history && history.length > 0 && (
+            <ul className="request-list">
+              {history.map((r) => (
+                <li key={r.id} className="review-card hist-card">
+                  <div className="review-head">
+                    <div className="review-who">
+                      <span className="review-name">{r.employeeName}</span>
+                      <StatusBadge status={r.status} />
+                    </div>
+                    <span className="muted review-sub">{r.decidedAt ? new Date(r.decidedAt).toLocaleDateString() : ""}</span>
+                  </div>
+                  <div className="review-change">{summarizeRequest(r)}</div>
+                  {r.decidedBy && <div className="muted review-email">by {r.decidedBy}{r.decisionNote ? ` · “${r.decisionNote}”` : ""}</div>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
     </div>
   );
 }

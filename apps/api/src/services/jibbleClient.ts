@@ -5,6 +5,7 @@ import type {
   ProfileDetailsDTO,
   PtoBalanceDTO,
   HolidayDTO,
+  LeaveHistoryDTO,
   PayPeriodDef,
 } from "@timesheet/shared";
 
@@ -119,6 +120,8 @@ export interface JibbleClient {
   getProfile(personId: string): Promise<ProfileDetailsDTO | null>;
   /** A person's time-off policy balances (PTO). */
   getLeaveBalances(personId: string): Promise<PtoBalanceDTO[]>;
+  /** A person's time-off balance change history (with comments). */
+  getLeaveHistory(personId: string): Promise<LeaveHistoryDTO[]>;
   /** The organization's upcoming paid holidays. */
   getUpcomingHolidays(): Promise<HolidayDTO[]>;
   /** The org's default pay-period definition. */
@@ -172,6 +175,10 @@ export class StubJibbleClient implements JibbleClient {
   }
 
   async getLeaveBalances(): Promise<PtoBalanceDTO[]> {
+    return [];
+  }
+
+  async getLeaveHistory(): Promise<LeaveHistoryDTO[]> {
     return [];
   }
 
@@ -390,6 +397,43 @@ export class HttpJibbleClient implements JibbleClient {
       });
   }
 
+  async getLeaveHistory(personId: string): Promise<LeaveHistoryDTO[]> {
+    const filter = encodeURIComponent(`personId eq ${personId}`);
+    const [histRes, polRes] = await Promise.all([
+      this.jfetch(`${this.cfg.baseTimeTrackingUrl}/v1/TimeOffHistories?$filter=${filter}&$top=500`),
+      this.jfetch(`${this.cfg.baseWorkspaceUrl}/v1/TimeOffPolicies?$top=200`),
+    ]);
+    if (!histRes.ok) throw new Error(`Jibble time-off history failed (${histRes.status})`);
+    const rows =
+      ((await histRes.json()) as {
+        value: Array<{
+          id: string;
+          policyId: string;
+          timestamp: string;
+          change?: number;
+          action?: string;
+          description?: string;
+        }>;
+      }).value ?? [];
+    const policies = polRes.ok ? ((await polRes.json()) as { value: RawPolicy[] }).value ?? [] : [];
+    const byId = new Map(policies.map((p) => [p.id, p]));
+    return rows
+      .map((r) => {
+        const pol = byId.get(r.policyId);
+        return {
+          id: r.id,
+          policyId: r.policyId,
+          policyName: pol?.name ?? "Time off",
+          timestamp: r.timestamp,
+          change: r.change ?? 0,
+          action: r.action ?? "",
+          description: r.description ?? "",
+          unit: pol?.kind ?? "Hours",
+        };
+      })
+      .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+  }
+
   async getUpcomingHolidays(): Promise<HolidayDTO[]> {
     const url = `${this.cfg.baseWorkspaceUrl}/v1/UpcomingHolidays?$top=100`;
     const res = await fetch(url, { headers: await this.authHeaders() });
@@ -529,26 +573,34 @@ export class HttpJibbleClient implements JibbleClient {
       return this.replaceEntry(request.jibbleEntryId, person.id, timeUtc, offset, request.date, note);
     }
 
-    // NEW entry: only a missed clock-in/out is auto-creatable. An "adjust" with
-    // no target entry can't be auto-applied — hand it to an admin.
-    if (request.eventType !== "in" && request.eventType !== "out") {
+    // NEW missed shift: always create BOTH a clock-in and a clock-out so Jibble
+    // never gets an orphan punch. `intendedTime` = clock-in, `endTime` = clock-out.
+    if (!request.endTime) {
       return {
         kind: "manual",
         instruction:
-          `Time adjustment for ${request.employeeEmail} on ${request.date} to ${request.intendedTime}: ` +
-          `no existing entry was selected — correct it in Jibble manually.`,
+          `Missed entry for ${request.employeeEmail} on ${request.date}: no clock-out time was ` +
+          `provided — add the full in/out shift in Jibble manually.`,
       };
     }
-
-    const entryId = await this.createTimeEntry({
+    const out = localWallToJibbleTime(request.date, request.endTime, timeZone);
+    const inId = await this.createTimeEntry({
       personId: person.id,
-      type: request.eventType === "in" ? "In" : "Out",
+      type: "In",
       timeUtc,
       offset,
       belongsToDate: request.date,
       note,
     });
-    return { kind: "applied", jibbleEntryId: entryId };
+    const outId = await this.createTimeEntry({
+      personId: person.id,
+      type: "Out",
+      timeUtc: out.timeUtc,
+      offset: out.offset,
+      belongsToDate: request.date,
+      note,
+    });
+    return { kind: "applied", jibbleEntryId: `${inId},${outId}` };
   }
 
   /** Replace an existing entry's time: delete the old, create a new one at the
