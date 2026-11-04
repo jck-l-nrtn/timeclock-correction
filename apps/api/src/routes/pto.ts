@@ -3,6 +3,7 @@ import { CreatePtoRequestSchema } from "@timesheet/shared";
 import * as data from "../db/data.js";
 import { notifier } from "../services/notify.js";
 import { resolveEmployee } from "../services/employeeAuth.js";
+import { approverEmailFor } from "../services/session.js";
 import { toCorrectionRequestDTO } from "../mappers.js";
 
 export const ptoRouter = Router();
@@ -14,12 +15,11 @@ export const ptoRouter = Router();
  */
 ptoRouter.post("/", async (req, res) => {
   const emp = await resolveEmployee(req);
+  if (!emp) return res.status(401).json({ error: "unauthenticated" });
   const body = { ...req.body };
-  if (emp) {
-    body.employeeEmail = emp.email;
-    if (emp.fullName) body.employeeName = emp.fullName;
-    if (emp.jibblePersonId) body.jibblePersonId = emp.jibblePersonId;
-  }
+  body.employeeEmail = emp.email;
+  if (emp.fullName) body.employeeName = emp.fullName;
+  if (emp.jibblePersonId) body.jibblePersonId = emp.jibblePersonId;
 
   const parsed = CreatePtoRequestSchema.safeParse(body);
   if (!parsed.success) {
@@ -43,7 +43,7 @@ ptoRouter.post("/", async (req, res) => {
   const dto = toCorrectionRequestDTO(row);
   // Await so the email send completes before Lambda freezes the execution env.
   try {
-    await notifier.newRequestSubmitted(dto);
+    await notifier.newRequestSubmitted(dto, await approverEmailFor(input.employeeEmail));
   } catch (err) {
     console.error("[pto] notify failed:", err);
   }

@@ -4,6 +4,7 @@ import * as data from "../db/data.js";
 import { jibbleClient } from "../services/jibbleClient.js";
 import { notifier } from "../services/notify.js";
 import { resolveEmployee } from "../services/employeeAuth.js";
+import { approverEmailFor } from "../services/session.js";
 import { toCorrectionRequestDTO } from "../mappers.js";
 
 export const requestsRouter = Router();
@@ -21,17 +22,16 @@ requestsRouter.get("/", async (req, res) => {
 
 /**
  * POST /api/requests
- * Employee submits a missed-timeclock / adjustment request. A logged-in
- * employee's identity is authoritative; anonymous (QR) submissions use the body.
+ * Employee submits a missed-timeclock / adjustment request. Requires a signed-in
+ * session; the authenticated identity is authoritative (not the body).
  */
 requestsRouter.post("/", async (req, res) => {
   const emp = await resolveEmployee(req);
+  if (!emp) return res.status(401).json({ error: "unauthenticated" });
   const body = { ...req.body };
-  if (emp) {
-    body.employeeEmail = emp.email;
-    if (emp.fullName) body.employeeName = emp.fullName;
-    if (emp.jibblePersonId) body.jibblePersonId = emp.jibblePersonId;
-  }
+  body.employeeEmail = emp.email;
+  if (emp.fullName) body.employeeName = emp.fullName;
+  if (emp.jibblePersonId) body.jibblePersonId = emp.jibblePersonId;
 
   const parsed = CreateCorrectionRequestSchema.safeParse(body);
   if (!parsed.success) {
@@ -68,7 +68,7 @@ requestsRouter.post("/", async (req, res) => {
   const dto = toCorrectionRequestDTO(row);
   // Await so the email send completes before Lambda freezes the execution env.
   try {
-    await notifier.newRequestSubmitted(dto);
+    await notifier.newRequestSubmitted(dto, await approverEmailFor(input.employeeEmail));
   } catch (err) {
     console.error("[requests] notify failed:", err);
   }

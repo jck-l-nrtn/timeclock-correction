@@ -1,62 +1,30 @@
-import { useState } from "react";
-import { ApiError, employeeLogin, type EmployeeProfile } from "../api.js";
+import { startGoogleLogin } from "../api.js";
 import { BrandHero } from "./Brand.js";
+import { GoogleButton } from "./GoogleButton.js";
+
+const LOGIN_ERRORS: Record<string, string> = {
+  not_recognized:
+    "We couldn't find you in the system yet. Ask your manager to add you, then try again.",
+  email_unverified: "Your Google email isn't verified. Verify it with Google and try again.",
+  sso_not_configured: "Google sign-in isn't set up yet. Please contact your admin.",
+  google_denied: "Google sign-in was cancelled.",
+  bad_state: "Your sign-in session expired. Please try again.",
+  sso_failed: "Something went wrong signing in. Please try again.",
+};
 
 /**
- * Employee sign-in. Accounts are created by an admin (no self-service signup).
- * Username is the work email; the first password is the Jibble kiosk PIN.
+ * Employee sign-in — Google SSO only. Accounts are auto-created on first sign-in
+ * for anyone in the Jibble org (or added manually by an admin).
  */
-export function EmployeeAuth({ onAuthed }: { onAuthed: (p: EmployeeProfile) => void }) {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setBusy(true);
-    try {
-      onAuthed(await employeeLogin(email.trim(), password));
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Something went wrong");
-    } finally {
-      setBusy(false);
-    }
-  }
-
+export function EmployeeAuth() {
+  const err = new URLSearchParams(window.location.search).get("login_error");
   return (
-    <section className="card">
+    <section className="card auth-card">
       <BrandHero subtitle="Employee Hub" />
       <h1>Sign in</h1>
-      <p className="muted">
-        Use your Jibble email and kiosk PIN to sign in. Ask Jack if you have any questions.
-      </p>
-      <form onSubmit={submit} noValidate>
-        <label className="field">
-          <span className="field-label">Jibble email</span>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@company.com"
-            autoComplete="email"
-          />
-        </label>
-        <label className="field">
-          <span className="field-label">Kiosk PIN</span>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="current-password"
-          />
-        </label>
-        {error && <p className="error-banner">{error}</p>}
-        <button type="submit" className="btn-primary" disabled={busy}>
-          {busy ? "Signing in…" : "Sign in"}
-        </button>
-      </form>
+      <p className="muted">Sign in with your Google account to view your timesheet and requests.</p>
+      {err && <p className="error-banner">{LOGIN_ERRORS[err] ?? "Sign-in failed. Please try again."}</p>}
+      <GoogleButton onClick={() => startGoogleLogin("employee")} />
     </section>
   );
 }

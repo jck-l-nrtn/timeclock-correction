@@ -29,7 +29,8 @@ function summarize(r: CorrectionRequestDTO): string {
  * contain a login token — so they always log (swap for real email later).
  */
 export interface Notifier {
-  newRequestSubmitted(request: CorrectionRequestDTO): Promise<void>;
+  /** `to` routes the alert to the requester's approver (manager); else the default inbox. */
+  newRequestSubmitted(request: CorrectionRequestDTO, to?: string): Promise<void>;
   requestDecided(request: CorrectionRequestDTO): Promise<void>;
   sendMagicLink(email: string, link: string): Promise<void>;
   /** Deliver new-account login details to the employee (email/SMS). */
@@ -37,11 +38,12 @@ export interface Notifier {
 }
 
 class ConsoleNotifier implements Notifier {
-  async newRequestSubmitted(r: CorrectionRequestDTO): Promise<void> {
+  async newRequestSubmitted(r: CorrectionRequestDTO, to?: string): Promise<void> {
     console.log(
-      `[notify] New ${kindLabel(r)} ${r.id} from ${r.employeeName} <${r.employeeEmail}> — ${summarize(r)}`
+      `[notify] New ${kindLabel(r)} ${r.id} from ${r.employeeName} <${r.employeeEmail}> → ${to ?? "default inbox"} — ${summarize(r)}`
     );
     await sendEmail({
+      to: to || undefined,
       subject: `New ${kindLabel(r)} — ${r.employeeName}`,
       text:
         `${r.employeeName} (${r.employeeEmail}) submitted a ${kindLabel(r)}.\n\n` +
@@ -87,8 +89,8 @@ class WebhookNotifier extends ConsoleNotifier {
     }
   }
 
-  async newRequestSubmitted(r: CorrectionRequestDTO): Promise<void> {
-    await super.newRequestSubmitted(r);
+  async newRequestSubmitted(r: CorrectionRequestDTO, to?: string): Promise<void> {
+    await super.newRequestSubmitted(r, to);
     await this.post(
       `🕒 New ${kindLabel(r)} from *${r.employeeName}* — ${summarize(r)}. Reason: ${r.reason}`
     );

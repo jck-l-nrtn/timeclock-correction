@@ -6,14 +6,20 @@ export function PtoForm({
   employeeName,
   employeeEmail,
   jibblePersonId,
+  initialStart = "",
+  initialEnd = "",
+  onSubmitted,
 }: {
   employeeName: string;
   employeeEmail: string;
   jibblePersonId?: string | null;
+  initialStart?: string;
+  initialEnd?: string;
+  onSubmitted?: () => void;
 }) {
   const [ptoType, setPtoType] = useState<string>(PtoType.Vacation);
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  const [startDate, setStartDate] = useState(initialStart);
+  const [endDate, setEndDate] = useState(initialEnd);
   const [reason, setReason] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -44,6 +50,7 @@ export function PtoForm({
     try {
       await submitPtoRequest(parsed.data);
       setDone(true);
+      onSubmitted?.();
     } catch (err) {
       if (err instanceof ApiError && err.issues) {
         const fe: Record<string, string> = {};

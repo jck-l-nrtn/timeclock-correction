@@ -1,18 +1,21 @@
 import { useCallback, useEffect, useState } from "react";
 import type { CorrectionRequestDTO } from "@timesheet/shared";
 import {
-  adminLogin,
+  masterLogin,
   adminLogout,
   adminMe,
   fetchAdminQueue,
+  startGoogleLogin,
   submitDecision,
   type AdminSession,
 } from "../api.js";
 import { StatusBadge } from "../components/StatusBadge.js";
 import { AdminUsers } from "../components/AdminUsers.js";
+import { OrgPeople } from "../components/OrgPeople.js";
 import { AdminLog } from "../components/AdminLog.js";
 import { ConfirmDialog } from "../components/ConfirmDialog.js";
 import { BrandHero } from "../components/Brand.js";
+import { GoogleButton } from "../components/GoogleButton.js";
 import { summarizeRequest } from "../labels.js";
 
 /**
@@ -44,18 +47,30 @@ export function AdminPage() {
   return <AdminShell session={session} onSignOut={() => setSession(null)} />;
 }
 
+const LOGIN_ERRORS: Record<string, string> = {
+  not_recognized: "That Google account isn't set up here. Ask the master admin to add you.",
+  forbidden: "That account doesn't have admin access.",
+  email_unverified: "Your Google email isn't verified.",
+  sso_not_configured: "Google sign-in isn't configured yet.",
+  google_denied: "Google sign-in was cancelled.",
+  bad_state: "Your sign-in session expired. Please try again.",
+  sso_failed: "Something went wrong signing in. Please try again.",
+};
+
 function AdminLogin({ onLogin }: { onLogin: (s: AdminSession) => void }) {
+  const [showMaster, setShowMaster] = useState(false);
   const [email, setEmail] = useState("");
-  const [pin, setPin] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const ssoErr = new URLSearchParams(window.location.search).get("login_error");
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleMaster(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setBusy(true);
     try {
-      onLogin(await adminLogin(email.trim(), pin));
+      onLogin(await masterLogin(email.trim(), password));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {
@@ -64,43 +79,47 @@ function AdminLogin({ onLogin }: { onLogin: (s: AdminSession) => void }) {
   }
 
   return (
-    <section className="card">
-      <BrandHero subtitle="Admin · Timeclock Corrections" />
+    <section className="card auth-card">
+      <BrandHero subtitle="Admin Console" />
       <h1>Admin sign in</h1>
-      <p className="muted">
-        Timeclock admins: sign in with your Jibble email and kiosk PIN. Only Jibble
-        Admins and Owners can access this dashboard.
-      </p>
-      <form onSubmit={handleSubmit} noValidate>
-        <label className="field">
-          <span className="field-label">Jibble email</span>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            autoComplete="email"
-          />
-        </label>
-        <label className="field">
-          <span className="field-label">Kiosk PIN</span>
-          <input
-            type="password"
-            value={pin}
-            onChange={(e) => setPin(e.target.value)}
-            autoComplete="current-password"
-          />
-        </label>
-        {error && <p className="error-banner">{error}</p>}
-        <button type="submit" className="btn-primary" disabled={busy}>
-          {busy ? "Signing in…" : "Sign in"}
-        </button>
-      </form>
+      <p className="muted">Sign in with your Google account. Admin access is granted by the master admin.</p>
+      {ssoErr && <p className="error-banner">{LOGIN_ERRORS[ssoErr] ?? "Sign-in failed. Please try again."}</p>}
+      <GoogleButton label="Sign in with Google" onClick={() => startGoogleLogin("admin")} />
+
+      <div className="master-login">
+        {!showMaster ? (
+          <button className="btn-link" onClick={() => setShowMaster(true)}>
+            Master admin sign in
+          </button>
+        ) : (
+          <form onSubmit={handleMaster} noValidate>
+            <p className="muted" style={{ marginTop: "1rem" }}>Break-glass master admin only.</p>
+            <label className="field">
+              <span className="field-label">Email</span>
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
+            </label>
+            <label className="field">
+              <span className="field-label">Password</span>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+              />
+            </label>
+            {error && <p className="error-banner">{error}</p>}
+            <button type="submit" className="btn-primary" disabled={busy}>
+              {busy ? "Signing in…" : "Sign in"}
+            </button>
+          </form>
+        )}
+      </div>
     </section>
   );
 }
 
 function AdminShell({ session, onSignOut }: { session: AdminSession; onSignOut: () => void }) {
-  const [tab, setTab] = useState<"queue" | "log" | "users">("queue");
+  const [tab, setTab] = useState<"queue" | "log" | "org" | "users">("queue");
   return (
     <div>
       <div className="dashboard-head">
@@ -111,8 +130,11 @@ function AdminShell({ session, onSignOut }: { session: AdminSession; onSignOut: 
           <button className={tab === "log" ? "tab tab-active" : "tab"} onClick={() => setTab("log")}>
             Decision log
           </button>
+          <button className={tab === "org" ? "tab tab-active" : "tab"} onClick={() => setTab("org")}>
+            Org chart
+          </button>
           <button className={tab === "users" ? "tab tab-active" : "tab"} onClick={() => setTab("users")}>
-            Users
+            Add people
           </button>
         </div>
         <div className="admin-user">
@@ -130,6 +152,7 @@ function AdminShell({ session, onSignOut }: { session: AdminSession; onSignOut: 
       </div>
       {tab === "queue" && <AdminQueue />}
       {tab === "log" && <AdminLog />}
+      {tab === "org" && <OrgPeople />}
       {tab === "users" && <AdminUsers />}
     </div>
   );

@@ -1,66 +1,71 @@
 import { Router } from "express";
+import { timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { config, isProd } from "../config.js";
-import { createMagicLink } from "../services/magicLink.js";
-import { notifier } from "../services/notify.js";
-import { getAdminByEmail, upsertAdmin } from "../db/data.js";
-import { clearSession, issueSession, readAdminEmail } from "../services/adminAuth.js";
-import { jibbleClient } from "../services/jibbleClient.js";
+import { clearSession, issueSession, currentPerson, isMaster } from "../services/session.js";
+import { upsertPerson } from "../db/data.js";
 
 export const authRouter = Router();
 
-const MagicLinkRequestSchema = z.object({ email: z.string().email() });
+/**
+ * POST /api/auth/dev-login { email, fullName?, isAdmin?, jibblePersonId? }
+ * Local/dev + test only (DEV_LOGIN_ENABLED && !production). Provisions a Person
+ * and issues a session without Google — never available in production.
+ */
+if (config.auth.devLoginEnabled && !isProd) {
+  authRouter.post("/dev-login", async (req, res) => {
+    const email = typeof req.body?.email === "string" ? req.body.email.toLowerCase() : "";
+    if (!email) return res.status(400).json({ error: "email_required" });
+    const person = await upsertPerson({
+      email,
+      fullName: typeof req.body?.fullName === "string" ? req.body.fullName : email,
+      isAdmin: req.body?.isAdmin === true,
+      jibblePersonId: typeof req.body?.jibblePersonId === "string" ? req.body.jibblePersonId : null,
+      managerEmail: typeof req.body?.managerEmail === "string" ? req.body.managerEmail : null,
+    });
+    issueSession(res, person.email);
+    return res.json({ ok: true, email: person.email, isAdmin: Boolean(person.isAdmin) });
+  });
+}
+
+const MasterLoginSchema = z.object({ email: z.string().email(), password: z.string().min(1) });
+
+function safeEqual(a: string, b: string): boolean {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  if (ab.length !== bb.length) return false;
+  return timingSafeEqual(ab, bb);
+}
 
 /**
- * POST /api/auth/magic-link
- * Issue a status-lookup link for an email. Always returns 200 (no enumeration
- * leak). In dev the link is returned so it can be tested without real email.
+ * POST /api/auth/master-login
+ * Break-glass, non-SSO login for the single master admin (env-configured). Used
+ * when Google is unavailable or someone is locked out. Everyone else uses SSO.
  */
-authRouter.post("/magic-link", async (req, res) => {
-  const parsed = MagicLinkRequestSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: "invalid_email" });
-  const email = parsed.data.email.toLowerCase();
-
-  const token = await createMagicLink(email);
-  const link = `${config.webOrigin}/status?token=${token}`;
-  await notifier.sendMagicLink(email, link);
-
-  return res.json({ ok: true, ...(isProd ? {} : { devLink: link }) });
-});
-
-const AdminLoginSchema = z.object({ email: z.string().email(), password: z.string().min(1) });
-
-/**
- * POST /api/auth/admin-login
- * Admins sign in with their Jibble email + kiosk PIN. Access is granted only if
- * their Jibble role is Admin or Owner. We upsert a local admin record so
- * decisions can be attributed.
- */
-authRouter.post("/admin-login", async (req, res) => {
-  const parsed = AdminLoginSchema.safeParse(req.body);
+authRouter.post("/master-login", (req, res) => {
+  const parsed = MasterLoginSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "invalid_credentials" });
-  const email = parsed.data.email.toLowerCase();
+  const email = parsed.data.email.trim().toLowerCase();
 
-  const person = (await jibbleClient.listPeople()).find((p) => p.email.toLowerCase() === email);
-  if (!person || person.pinCode !== parsed.data.password) {
+  const masterPw = config.auth.masterAdminPassword;
+  if (!config.auth.masterAdminEmail || !masterPw) {
+    return res.status(503).json({ error: "master_admin_not_configured" });
+  }
+  if (!isMaster(email) || !safeEqual(parsed.data.password, masterPw)) {
     return res.status(401).json({ error: "invalid_credentials" });
   }
-  if (person.role !== "Admin" && person.role !== "Owner") {
-    return res.status(403).json({ error: "not_an_admin" });
-  }
-
-  const admin = await upsertAdmin({ email, name: person.fullName, jibbleUserId: person.id });
-  issueSession(res, admin.email);
-  return res.json({ id: admin.id, email: admin.email, name: admin.name });
+  issueSession(res, email);
+  return res.json({ id: "master", email, name: "Master Admin" });
 });
 
-/** GET /api/auth/me — current admin, or 401 if not signed in. */
+/** GET /api/auth/me — current ADMIN (admin console gate), or 401/403. */
 authRouter.get("/me", async (req, res) => {
-  const email = readAdminEmail(req);
-  if (!email) return res.status(401).json({ error: "unauthenticated" });
-  const admin = await getAdminByEmail(email);
-  if (!admin) return res.status(401).json({ error: "unauthenticated" });
-  return res.json({ id: admin.id, email: admin.email, name: admin.name });
+  const person = await currentPerson(req);
+  if (!person) return res.status(401).json({ error: "unauthenticated" });
+  if (!person.isAdmin && !isMaster(person.email)) {
+    return res.status(403).json({ error: "forbidden" });
+  }
+  return res.json({ id: person.id, email: person.email, name: person.fullName });
 });
 
 /** POST /api/auth/logout */

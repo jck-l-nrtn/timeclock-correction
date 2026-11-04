@@ -1,47 +1,25 @@
 import { Router } from "express";
-import { z } from "zod";
 import { getEmployeeByEmail } from "../db/data.js";
-import { verifyPassword } from "../services/passwords.js";
-import {
-  clearEmployeeSession,
-  issueEmployeeSession,
-  readEmployeeEmail,
-  resolveEmployee,
-} from "../services/employeeAuth.js";
+import { clearEmployeeSession, resolveEmployee } from "../services/employeeAuth.js";
+import { currentPerson, isMaster } from "../services/session.js";
 import { jibbleClient } from "../services/jibbleClient.js";
 
 export const employeeRouter = Router();
 
-const LoginSchema = z.object({ email: z.string().email(), password: z.string().min(1) });
-
-function profile(e: { email: string; fullName: string; jibblePersonId: string | null }) {
-  return { email: e.email, fullName: e.fullName, jibblePersonId: e.jibblePersonId };
+function profile(e: { email: string; fullName: string; jibblePersonId: string | null; isAdmin?: boolean }) {
+  return {
+    email: e.email,
+    fullName: e.fullName,
+    jibblePersonId: e.jibblePersonId,
+    isAdmin: Boolean(e.isAdmin) || isMaster(e.email),
+  };
 }
 
-/**
- * POST /api/employee/login
- * Sign in with work email + password. Accounts are created by an admin; there is
- * no self-signup or password change (a lightweight "use your own account" gate).
- */
-employeeRouter.post("/login", async (req, res) => {
-  const parsed = LoginSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: "invalid_credentials" });
-
-  const emp = await getEmployeeByEmail(parsed.data.email);
-  if (!emp || !verifyPassword(parsed.data.password, emp.passwordHash)) {
-    return res.status(401).json({ error: "invalid_credentials" });
-  }
-  issueEmployeeSession(res, emp.email);
-  return res.json(profile(emp));
-});
-
-/** GET /api/employee/me */
+/** GET /api/employee/me — the signed-in person (employee or admin). */
 employeeRouter.get("/me", async (req, res) => {
-  const email = readEmployeeEmail(req);
-  if (!email) return res.status(401).json({ error: "unauthenticated" });
-  const emp = await getEmployeeByEmail(email);
-  if (!emp) return res.status(401).json({ error: "unauthenticated" });
-  return res.json(profile(emp));
+  const person = await currentPerson(req);
+  if (!person || person.active === false) return res.status(401).json({ error: "unauthenticated" });
+  return res.json(profile(person));
 });
 
 /**

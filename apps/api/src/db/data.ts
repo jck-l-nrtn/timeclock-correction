@@ -36,36 +36,74 @@ function stripKeys<T>(item: Record<string, unknown>): T {
   return copy as T;
 }
 
-// ---- Employees ------------------------------------------------------------
+// ---- People (unified account record) --------------------------------------
+//
+// One record per person (PK=EMPLOYEE#<email>). Every signed-in user — employee
+// or admin — is a Person. `isAdmin` grants the admin console; `managerEmail` is
+// the single approver their requests route to (the org chart). SSO users have no
+// passwordHash. Fields are optional so pre-refactor rows still read cleanly.
 
 export interface EmployeeItem {
   id: string;
   email: string;
   fullName: string;
-  passwordHash: string;
+  /** Legacy password login (removed for SSO users); optional going forward. */
+  passwordHash?: string | null;
   jibblePersonId: string | null;
+  /** Admin console access (manually assigned by the master admin). */
+  isAdmin?: boolean;
+  /** The person's approver — who sees/decides their requests. null = master only. */
+  managerEmail?: string | null;
+  /** IANA timezone (e.g. America/Denver), captured from Jibble at provision. */
+  timeZone?: string | null;
+  /** Soft-disable a person without deleting history. */
+  active?: boolean;
   createdAt: string;
+}
+/** Semantic alias — a Person is the unified account record. */
+export type PersonItem = EmployeeItem;
+
+/** Apply sane defaults for rows written before the account fields existed. */
+function normalizePerson(p: EmployeeItem): EmployeeItem {
+  return {
+    ...p,
+    passwordHash: p.passwordHash ?? null,
+    isAdmin: p.isAdmin ?? false,
+    managerEmail: p.managerEmail ?? null,
+    timeZone: p.timeZone ?? null,
+    active: p.active ?? true,
+  };
 }
 
 export async function getEmployeeByEmail(email: string): Promise<EmployeeItem | null> {
   const r = await ddb.send(
     new GetCommand({ TableName: TABLE, Key: { PK: `EMPLOYEE#${norm(email)}`, SK: "PROFILE" } })
   );
-  return r.Item ? stripKeys<EmployeeItem>(r.Item) : null;
+  return r.Item ? normalizePerson(stripKeys<EmployeeItem>(r.Item)) : null;
 }
+
+/** Person alias for the unified identity model. */
+export const getPersonByEmail = getEmployeeByEmail;
 
 export async function createEmployee(input: {
   email: string;
   fullName: string;
-  passwordHash: string;
+  passwordHash?: string | null;
   jibblePersonId: string | null;
+  isAdmin?: boolean;
+  managerEmail?: string | null;
+  timeZone?: string | null;
 }): Promise<EmployeeItem> {
   const item: EmployeeItem = {
     id: randomUUID(),
     email: norm(input.email),
     fullName: input.fullName,
-    passwordHash: input.passwordHash,
+    passwordHash: input.passwordHash ?? null,
     jibblePersonId: input.jibblePersonId,
+    isAdmin: input.isAdmin ?? false,
+    managerEmail: input.managerEmail ?? null,
+    timeZone: input.timeZone ?? null,
+    active: true,
     createdAt: now(),
   };
   await ddb.send(
@@ -78,7 +116,71 @@ export async function createEmployee(input: {
   return item;
 }
 
-/** Admin "existing accounts" list. Low-volume table → Scan with a filter is fine. */
+/**
+ * Upsert a Person by email, merging fields onto an existing row (preserving id,
+ * createdAt, and any field not supplied). Used by SSO auto-provision.
+ */
+export async function upsertPerson(input: {
+  email: string;
+  fullName?: string;
+  jibblePersonId?: string | null;
+  isAdmin?: boolean;
+  managerEmail?: string | null;
+  timeZone?: string | null;
+}): Promise<EmployeeItem> {
+  const existing = await getEmployeeByEmail(input.email);
+  const item: EmployeeItem = existing
+    ? {
+        ...existing,
+        fullName: input.fullName ?? existing.fullName,
+        jibblePersonId: input.jibblePersonId ?? existing.jibblePersonId,
+        isAdmin: input.isAdmin ?? existing.isAdmin ?? false,
+        managerEmail:
+          input.managerEmail !== undefined ? input.managerEmail : existing.managerEmail ?? null,
+        timeZone: input.timeZone ?? existing.timeZone ?? null,
+      }
+    : {
+        id: randomUUID(),
+        email: norm(input.email),
+        fullName: input.fullName ?? "",
+        passwordHash: null,
+        jibblePersonId: input.jibblePersonId ?? null,
+        isAdmin: input.isAdmin ?? false,
+        managerEmail: input.managerEmail ?? null,
+        timeZone: input.timeZone ?? null,
+        active: true,
+        createdAt: now(),
+      };
+  await ddb.send(
+    new PutCommand({
+      TableName: TABLE,
+      Item: { PK: `EMPLOYEE#${item.email}`, SK: "PROFILE", entity: "employee", ...item },
+    })
+  );
+  return item;
+}
+
+/** Set a person's approver (org chart). Pass null to clear (routes to master). */
+export async function setPersonManager(
+  email: string,
+  managerEmail: string | null
+): Promise<EmployeeItem | null> {
+  const p = await getEmployeeByEmail(email);
+  if (!p) return null;
+  return upsertPerson({ email: p.email, managerEmail: managerEmail ? norm(managerEmail) : null });
+}
+
+/** Grant or revoke admin-console access. */
+export async function setPersonAdmin(
+  email: string,
+  isAdmin: boolean
+): Promise<EmployeeItem | null> {
+  const p = await getEmployeeByEmail(email);
+  if (!p) return null;
+  return upsertPerson({ email: p.email, isAdmin });
+}
+
+/** All Person/account rows (low-volume table → Scan with a filter is fine). */
 export async function listEmployees(): Promise<EmployeeItem[]> {
   const r = await ddb.send(
     new ScanCommand({
@@ -88,9 +190,11 @@ export async function listEmployees(): Promise<EmployeeItem[]> {
     })
   );
   return (r.Items ?? [])
-    .map((i) => stripKeys<EmployeeItem>(i))
+    .map((i) => normalizePerson(stripKeys<EmployeeItem>(i)))
     .sort((a, b) => a.fullName.localeCompare(b.fullName));
 }
+/** People list alias (unified identity model). */
+export const listPeople = listEmployees;
 
 // ---- Admins ---------------------------------------------------------------
 

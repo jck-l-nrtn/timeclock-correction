@@ -7,6 +7,7 @@ import { config, isProd } from "./config.js";
 import { requestsRouter } from "./routes/requests.js";
 import { ptoRouter } from "./routes/pto.js";
 import { authRouter } from "./routes/auth.js";
+import { googleAuthRouter } from "./routes/googleAuth.js";
 import { adminRouter } from "./routes/admin.js";
 import { timesheetRouter } from "./routes/timesheet.js";
 import { employeeRouter } from "./routes/employee.js";
@@ -31,6 +32,7 @@ app.use("/api/timesheet", timesheetRouter);
 app.use("/api/employee", employeeRouter);
 app.use("/api/holidays", holidaysRouter);
 app.use("/api/reports", reportsRouter);
+app.use("/api/auth/google", googleAuthRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/admin", adminRouter);
 

@@ -14,13 +14,17 @@ Parameters:
   WebOrigin:
     Type: String
     Default: https://staff.montanepm.com
-    Description: Public URL (for magic-link URLs). Set to the final domain.
+    Description: Public URL the app is served from (also the OAuth redirect base).
   JibbleClientId: { Type: String }
   JibbleClientSecret: { Type: String, NoEcho: true }
   SessionSecret: { Type: String, NoEcho: true }
   EmailFrom: { Type: String, Default: timeclock@montanepm.com, Description: Verified SES sender. }
   NotifyEmailTo: { Type: String }
   ReportToken: { Type: String, NoEcho: true }
+  GoogleClientId: { Type: String, Default: "", Description: Google OAuth web client id. }
+  GoogleClientSecret: { Type: String, NoEcho: true, Default: "" }
+  MasterAdminEmail: { Type: String, Default: "", Description: Break-glass master admin email. }
+  MasterAdminPassword: { Type: String, NoEcho: true, Default: "" }
   CustomDomain:
     Type: String
     Default: staff.montanepm.com
@@ -128,6 +132,11 @@ Resources:
           EMAIL_FROM: !Ref EmailFrom
           NOTIFY_EMAIL_TO: !Ref NotifyEmailTo
           REPORT_TOKEN: !Ref ReportToken
+          GOOGLE_OAUTH_CLIENT_ID: !Ref GoogleClientId
+          GOOGLE_OAUTH_CLIENT_SECRET: !Ref GoogleClientSecret
+          OAUTH_REDIRECT_BASE: !Ref WebOrigin
+          MASTER_ADMIN_EMAIL: !Ref MasterAdminEmail
+          MASTER_ADMIN_PASSWORD: !Ref MasterAdminPassword
 
   # HTTP API (API Gateway v2) in front of the Lambda — CloudFront routes /api/* here.
   HttpApi:

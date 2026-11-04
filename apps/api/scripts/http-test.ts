@@ -2,7 +2,6 @@
  * End-to-end HTTP test: the real Express app against in-process dynalite,
  * Jibble stubbed (no creds). TEMPORARY.
  */
-import { createHmac } from "node:crypto";
 import dynalite from "dynalite";
 import {
   CreateTableCommand,
@@ -16,6 +15,8 @@ process.env.DYNAMO_ENDPOINT = `http://localhost:${DB_PORT}`;
 process.env.TABLE_NAME = "TimeclockHttp";
 process.env.AWS_REGION = "us-east-1";
 process.env.SESSION_SECRET = "testsecret";
+process.env.MASTER_ADMIN_EMAIL = "master@co.com";
+process.env.MASTER_ADMIN_PASSWORD = "master-secret";
 process.env.PORT = String(PORT);
 process.env.NODE_ENV = "development";
 // Force the Jibble stub (override any creds from .env) so applyCorrection is
@@ -61,16 +62,6 @@ await admin.send(
   })
 );
 
-// Seed an admin so requireAdmin passes, and forge its session cookie.
-const data = await import("../src/db/data.js");
-await data.upsertAdmin({ email: "boss@co.com", name: "The Boss", jibbleUserId: null });
-function adminCookie(email: string): string {
-  const payload = Buffer.from(JSON.stringify({ email, exp: Date.now() + 3_600_000 })).toString("base64url");
-  const sig = createHmac("sha256", "testsecret").update(payload).digest("base64url");
-  return `admin_session=${payload}.${sig}`;
-}
-const AC = adminCookie("boss@co.com");
-
 // Start the app.
 await import("../src/index.js");
 await new Promise((r) => setTimeout(r, 500));
@@ -78,79 +69,119 @@ const base = `http://localhost:${PORT}`;
 const j = (r: Response) => r.json() as Promise<any>;
 const ok = (c: boolean, m: string) => console.log(`${c ? "✅" : "❌"} ${m}`);
 
+const cookieFrom = (r: Response) => (/session=[^;]+/.exec(r.headers.get("set-cookie") || "") || [""])[0];
+async function devLogin(email: string, opts: Record<string, unknown> = {}): Promise<string> {
+  const r = await fetch(`${base}/api/auth/dev-login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, ...opts }),
+  });
+  return cookieFrom(r);
+}
+
+// Seed people via dev-login: boss (admin), jane (reports to boss), bob (reports elsewhere).
+const BOSS = await devLogin("boss@co.com", { fullName: "The Boss", isAdmin: true });
+const JANE = await devLogin("jane@co.com", { fullName: "Jane Doe", managerEmail: "boss@co.com" });
+const BOB = await devLogin("bob@co.com", { fullName: "Bob Ross", managerEmail: "someone-else@co.com" });
+ok(!!BOSS && !!JANE && !!BOB, "dev-login issues sessions");
+
+// Master admin via break-glass login.
+const MASTER = cookieFrom(
+  await fetch(`${base}/api/auth/master-login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: "master@co.com", password: "master-secret" }),
+  })
+);
+ok(!!MASTER, "master-login works");
+
 // 1. health
 ok((await (await fetch(`${base}/api/health`)).json()).ok === true, "health");
 
-// 2. submit (anonymous)
+// 2. submit requires a session (401 without one)
+ok(
+  (await fetch(`${base}/api/requests`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ date: "2026-06-20", eventType: "out", intendedTime: "17:00", reason: "x", affirmed: true }),
+  })).status === 401,
+  "POST /api/requests without session -> 401"
+);
+
+// 3. submit as jane (identity from session)
 const created = await j(
   await fetch(`${base}/api/requests`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      employeeName: "Jane Doe", employeeEmail: "jane@co.com", date: "2026-06-20",
-      eventType: "out", intendedTime: "17:00", reason: "forgot", affirmed: true,
-    }),
+    headers: { "Content-Type": "application/json", Cookie: JANE },
+    body: JSON.stringify({ date: "2026-06-20", eventType: "out", intendedTime: "17:00", reason: "forgot", affirmed: true }),
   })
 );
-ok(!!created.id && created.status === "pending", "POST /api/requests -> pending");
+ok(created.status === "pending" && created.employeeEmail === "jane@co.com", "submit as jane -> pending, identity from session");
 
-// 3. get by id
-ok((await (await fetch(`${base}/api/requests/${created.id}`)).json()).id === created.id, "GET /api/requests/:id");
+// 4. jane lists her own requests
+const mine = await j(await fetch(`${base}/api/requests`, { headers: { Cookie: JANE } }));
+ok(Array.isArray(mine) && mine.length === 1, "jane lists her requests");
 
-// 4. magic link -> token -> my requests
-const ml = await j(await fetch(`${base}/api/auth/magic-link`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: "jane@co.com" }) }));
-const token = new URL(ml.devLink).searchParams.get("token")!;
-const mine = await j(await fetch(`${base}/api/requests?token=${token}`));
-ok(Array.isArray(mine) && mine.length === 1, "magic-link + list my requests");
+// 5. bob submits — routed to his (different) manager
+const bobReq = await j(
+  await fetch(`${base}/api/requests`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Cookie: BOB },
+    body: JSON.stringify({ date: "2026-06-21", eventType: "in", intendedTime: "08:00", reason: "forgot", affirmed: true }),
+  })
+);
+ok(bobReq.status === "pending", "bob submits -> pending");
 
-// 5. admin queue
-const queue = await j(await fetch(`${base}/api/admin/requests?status=pending`, { headers: { Cookie: AC } }));
-ok(queue.length === 1, "admin queue lists pending");
+// 6. ORG ROUTING: boss sees jane's request but NOT bob's; master sees both.
+const bossQueue = await j(await fetch(`${base}/api/admin/requests?status=pending`, { headers: { Cookie: BOSS } }));
+ok(bossQueue.some((r: any) => r.id === created.id) && !bossQueue.some((r: any) => r.id === bobReq.id), "boss sees only direct reports' requests");
+const masterQueue = await j(await fetch(`${base}/api/admin/requests?status=pending`, { headers: { Cookie: MASTER } }));
+ok(masterQueue.some((r: any) => r.id === created.id) && masterQueue.some((r: any) => r.id === bobReq.id), "master sees all requests");
 
-// 6. approve (stub Jibble -> manual -> status approved)
+// 7. boss may NOT decide bob's request (not their report)
+ok(
+  (await fetch(`${base}/api/admin/requests/${bobReq.id}/decision`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Cookie: BOSS },
+    body: JSON.stringify({ decision: "approved" }),
+  })).status === 403,
+  "boss cannot decide a non-report's request -> 403"
+);
+
+// 8. boss approves jane's (stub Jibble -> manual -> status approved)
 const decided = await j(
   await fetch(`${base}/api/admin/requests/${created.id}/decision`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Cookie: AC },
+    headers: { "Content-Type": "application/json", Cookie: BOSS },
     body: JSON.stringify({ decision: "approved", note: "ok" }),
   })
 );
 ok(decided.status === "approved" && decided.decidedBy === "The Boss" && !!decided.digitalRecord, "approve -> decidedBy + record");
 
-// 7. log + queue empties
-ok((await j(await fetch(`${base}/api/admin/log`, { headers: { Cookie: AC } }))).length === 1, "decision log");
-ok((await j(await fetch(`${base}/api/admin/requests?status=pending`, { headers: { Cookie: AC } }))).length === 0, "queue empty after decision");
-
-// 8. acknowledge (via magic-link token)
+// 9. acknowledge (via session)
 const ack = await j(
   await fetch(`${base}/api/requests/${created.id}/acknowledge`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token, signature: "Jane Doe" }),
+    headers: { "Content-Type": "application/json", Cookie: JANE },
+    body: JSON.stringify({ signature: "Jane Doe" }),
   })
 );
-ok(ack.employeeAckSignature === "Jane Doe" && !!ack.ackAt, "acknowledge");
+ok(ack.employeeAckSignature === "Jane Doe" && !!ack.ackAt, "acknowledge via session");
 
-// 9. PTO request flow
+// 10. PTO request flow (jane → boss)
 const pto = await j(
   await fetch(`${base}/api/pto`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      employeeName: "Jane Doe", employeeEmail: "jane@co.com",
-      ptoType: "vacation", startDate: "2026-12-20", endDate: "2026-12-24", reason: "Holidays",
-    }),
+    headers: { "Content-Type": "application/json", Cookie: JANE },
+    body: JSON.stringify({ ptoType: "vacation", startDate: "2026-12-20", endDate: "2026-12-24", reason: "Holidays" }),
   })
 );
 ok(pto.kind === "timeoff" && pto.status === "pending" && pto.ptoType === "vacation", "PTO submit -> pending timeoff");
 
-const ptoQueue = await j(await fetch(`${base}/api/admin/requests?status=pending`, { headers: { Cookie: AC } }));
-ok(ptoQueue.some((r: any) => r.id === pto.id && r.kind === "timeoff"), "PTO shows in admin queue");
-
 const ptoDecided = await j(
   await fetch(`${base}/api/admin/requests/${pto.id}/decision`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Cookie: AC },
+    headers: { "Content-Type": "application/json", Cookie: BOSS },
     body: JSON.stringify({ decision: "approved", note: "Enjoy" }),
   })
 );

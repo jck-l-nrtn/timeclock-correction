@@ -89,6 +89,8 @@ export interface TimesheetEntryDTO {
   timeUtc: string;
   /** Local wall-clock ISO (with offset) as Jibble derived it, if present. */
   localTime: string | null;
+  /** The person's UTC offset as an ISO-8601 duration (e.g. "-PT6H"), if present. */
+  offset: string | null;
   /** The calendar day (YYYY-MM-DD) the entry belongs to. */
   belongsToDate: string;
   note: string | null;

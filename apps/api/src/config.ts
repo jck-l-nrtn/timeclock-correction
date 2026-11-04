@@ -68,10 +68,22 @@ export const config = {
     dynamoEndpoint: optional("DYNAMO_ENDPOINT"),
   },
 
-  // Admin auth (Phase 4). Dev fallback lets the skeleton run without Jibble SSO.
+  // Auth. Google SSO is the only normal login; the master admin is break-glass.
   auth: {
     devLoginEnabled: optional("DEV_LOGIN_ENABLED", "true") === "true",
     sessionSecret: optional("SESSION_SECRET", "dev-insecure-secret-change-me"),
+    // Break-glass master admin (non-SSO). Always granted admin + full visibility.
+    masterAdminEmail: optional("MASTER_ADMIN_EMAIL").trim().toLowerCase(),
+    masterAdminPassword: optional("MASTER_ADMIN_PASSWORD"),
+  },
+
+  // Google OAuth (Sign in with Google). Create a Web client in Google Cloud and
+  // set the id/secret; redirect base is the public origin that serves the app.
+  google: {
+    clientId: optional("GOOGLE_OAUTH_CLIENT_ID"),
+    clientSecret: optional("GOOGLE_OAUTH_CLIENT_SECRET"),
+    // e.g. https://staff.montanepm.com — the callback is <base>/api/auth/google/callback
+    redirectBase: optional("OAUTH_REDIRECT_BASE") || optional("WEB_ORIGIN") || "http://localhost:4000",
   },
 } as const;
 

@@ -372,7 +372,7 @@ export class HttpJibbleClient implements JibbleClient {
     const url =
       `${this.cfg.baseTimeTrackingUrl}/v1/TimeEntries?$filter=${filter}` +
       `&$orderby=${encodeURIComponent("time asc")}` +
-      `&$select=id,type,time,localTime,belongsToDate,note,isManual,isLocked,status&$top=200`;
+      `&$select=id,type,time,offset,localTime,belongsToDate,note,isManual,isLocked,status&$top=200`;
     const res = await fetch(url, { headers: await this.authHeaders() });
     if (!res.ok) throw new Error(`Jibble list entries failed (${res.status})`);
     const json = (await res.json()) as { value?: RawEntry[] };
@@ -381,6 +381,7 @@ export class HttpJibbleClient implements JibbleClient {
       type: e.type,
       timeUtc: e.time,
       localTime: e.localTime ?? null,
+      offset: e.offset ?? null,
       belongsToDate: e.belongsToDate,
       note: e.note ?? null,
       isManual: !!e.isManual,
@@ -441,11 +442,13 @@ export class HttpJibbleClient implements JibbleClient {
     }
 
     const person = request.jibblePersonId
-      ? { id: request.jibblePersonId, timeZone: this.cfg.orgTimeZone }
+      ? { id: request.jibblePersonId }
       : await this.findPersonByEmail(request.employeeEmail);
     if (!person) throw new Error(`No Jibble person found for ${request.employeeEmail}`);
 
-    const timeZone = person.timeZone || this.cfg.orgTimeZone;
+    // Use the PERSON's own timezone (not the org default) so the corrected local
+    // wall-clock time maps to the right UTC instant. Resolved live from Jibble.
+    const timeZone = await this.resolveTimeZone(person.id);
     const { timeUtc, offset } = localWallToJibbleTime(request.date, request.intendedTime, timeZone);
     // Stamp the Jibble entry note with the approver, approval timestamp, the
     // employee's reason, and the admin's note — a self-contained audit trail on

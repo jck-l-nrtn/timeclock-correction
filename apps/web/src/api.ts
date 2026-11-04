@@ -69,6 +69,8 @@ export interface EmployeeProfile {
   email: string;
   fullName: string;
   jibblePersonId: string | null;
+  /** True if this person also has admin-console access. */
+  isAdmin: boolean;
 }
 
 export async function employeeMe(): Promise<EmployeeProfile | null> {
@@ -78,24 +80,14 @@ export async function employeeMe(): Promise<EmployeeProfile | null> {
   return (await res.json()) as EmployeeProfile;
 }
 
-export async function employeeLogin(email: string, password: string): Promise<EmployeeProfile> {
-  const res = await fetch("/api/employee/login", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ email, password }),
-  });
-  if (!res.ok) {
-    throw new ApiError(
-      res.status === 401 ? "Incorrect email or password." : `Sign in failed (${res.status})`,
-      res.status
-    );
-  }
-  return (await res.json()) as EmployeeProfile;
+/** Begin Google sign-in (full-page redirect). `intent` picks the landing surface. */
+export function startGoogleLogin(intent: "employee" | "admin" = "employee"): void {
+  window.location.href = `/api/auth/google/start?intent=${intent}`;
 }
 
 export async function employeeLogout(): Promise<void> {
   await fetch("/api/employee/logout", { method: "POST", credentials: "include" });
+  await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
 }
 
 /** Live Jibble profile details (phone, role, status, start date) for My Info. */
@@ -119,21 +111,7 @@ export async function fetchHolidays(): Promise<HolidayDTO[]> {
   return (await res.json()) as HolidayDTO[];
 }
 
-/** Request a magic link for the status lookup. `devLink` is present only in dev. */
-export async function requestMagicLink(email: string): Promise<{ ok: boolean; devLink?: string }> {
-  const res = await fetch("/api/auth/magic-link", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email }),
-  });
-  if (!res.ok) {
-    throw new ApiError(`Request failed (${res.status})`, res.status);
-  }
-  return (await res.json()) as { ok: boolean; devLink?: string };
-}
-
-/** Employee digitally signs off on a decided request. Uses the session, or a
- *  magic-link token when provided. */
+/** Employee digitally signs off on a decided request (uses the session). */
 export async function acknowledgeRequest(
   id: string,
   signature: string,
@@ -202,21 +180,17 @@ export async function adminMe(): Promise<AdminSession | null> {
   return (await res.json()) as AdminSession;
 }
 
-/** Admin login with Jibble email + kiosk PIN (must be a Jibble Admin/Owner). */
-export async function adminLogin(email: string, pin: string): Promise<AdminSession> {
-  const res = await fetch("/api/auth/admin-login", {
+/** Break-glass master-admin login (non-SSO email + password). */
+export async function masterLogin(email: string, password: string): Promise<AdminSession> {
+  const res = await fetch("/api/auth/master-login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ email, password: pin }),
+    body: JSON.stringify({ email, password }),
   });
   if (!res.ok) {
     throw new ApiError(
-      res.status === 403
-        ? "That Jibble account isn't an admin or owner."
-        : res.status === 401
-          ? "Incorrect email or kiosk PIN."
-          : `Login failed (${res.status})`,
+      res.status === 401 ? "Incorrect email or password." : `Login failed (${res.status})`,
       res.status
     );
   }
@@ -241,7 +215,40 @@ export interface EmployeeAccount {
   email: string;
   fullName: string;
   jibblePersonId: string | null;
+  isAdmin: boolean;
+  managerEmail: string | null;
+  active: boolean;
   createdAt: string;
+}
+
+/** All app accounts (for the org-chart screen). */
+export async function fetchPeople(): Promise<EmployeeAccount[]> {
+  const res = await fetch("/api/admin/people", { credentials: "include" });
+  if (!res.ok) throw new ApiError(`Failed to load people (${res.status})`, res.status);
+  return (await res.json()) as EmployeeAccount[];
+}
+
+/** Master-admin: set a person's approver and/or admin flag. */
+export async function updatePerson(
+  email: string,
+  patch: { managerEmail?: string | null; isAdmin?: boolean }
+): Promise<EmployeeAccount> {
+  const res = await fetch(`/api/admin/people/${encodeURIComponent(email)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new ApiError(
+      body?.error === "master_admin_only"
+        ? "Only the master admin can edit the org chart."
+        : `Update failed (${res.status})`,
+      res.status
+    );
+  }
+  return (await res.json()) as EmployeeAccount;
 }
 
 export async function adminListJibblePeople(): Promise<JibblePersonSummary[]> {
@@ -256,27 +263,28 @@ export async function adminListEmployees(): Promise<EmployeeAccount[]> {
   return (await res.json()) as EmployeeAccount[];
 }
 
+/** Master-admin: manually provision an SSO-ready account for a Jibble person. */
 export async function adminCreateEmployee(
   jibblePersonId: string,
-  password?: string
-): Promise<{ account: EmployeeAccount; tempPassword: string }> {
+  opts?: { isAdmin?: boolean; managerEmail?: string | null }
+): Promise<{ account: EmployeeAccount }> {
   const res = await fetch("/api/admin/employees", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ jibblePersonId, ...(password ? { password } : {}) }),
+    body: JSON.stringify({ jibblePersonId, ...opts }),
   });
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as { error?: string } | null;
     const msg =
       body?.error === "account_exists"
         ? "This person already has an account."
-        : body?.error === "no_default_password"
-          ? "This person has no kiosk PIN — set a password manually."
+        : body?.error === "master_admin_only"
+          ? "Only the master admin can add people."
           : `Failed to create account (${res.status})`;
     throw new ApiError(msg, res.status);
   }
-  return (await res.json()) as { account: EmployeeAccount; tempPassword: string };
+  return (await res.json()) as { account: EmployeeAccount };
 }
 
 /** Fetch the admin review queue for a given status. */

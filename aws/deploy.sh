@@ -27,6 +27,10 @@ set +a
 : "${EMAIL_FROM:=timeclock@montanepm.com}"
 : "${ACM_CERT_ARN:=}"
 : "${CUSTOM_DOMAIN:=staff.montanepm.com}"
+: "${GOOGLE_OAUTH_CLIENT_ID:=}"
+: "${GOOGLE_OAUTH_CLIENT_SECRET:=}"
+: "${MASTER_ADMIN_EMAIL:=}"
+: "${MASTER_ADMIN_PASSWORD:=}"
 
 echo "==> Build"
 npm run build:shared >/dev/null
@@ -55,7 +59,9 @@ aws cloudformation deploy --region "$REGION" --stack-name "$STACK" \
     JibbleClientId="$JIBBLE_CLIENT_ID" JibbleClientSecret="$JIBBLE_CLIENT_SECRET" \
     SessionSecret="$SESSION_SECRET" EmailFrom="$EMAIL_FROM" \
     NotifyEmailTo="$NOTIFY_EMAIL_TO" ReportToken="$REPORT_TOKEN" \
-    AcmCertArn="$ACM_CERT_ARN" CustomDomain="$CUSTOM_DOMAIN"
+    AcmCertArn="$ACM_CERT_ARN" CustomDomain="$CUSTOM_DOMAIN" \
+    GoogleClientId="$GOOGLE_OAUTH_CLIENT_ID" GoogleClientSecret="$GOOGLE_OAUTH_CLIENT_SECRET" \
+    MasterAdminEmail="$MASTER_ADMIN_EMAIL" MasterAdminPassword="$MASTER_ADMIN_PASSWORD"
 
 echo "==> Publish web"
 WEBBUCKET=$(aws cloudformation describe-stacks --stack-name "$STACK" --query "Stacks[0].Outputs[?OutputKey=='WebBucketName'].OutputValue" --output text)
