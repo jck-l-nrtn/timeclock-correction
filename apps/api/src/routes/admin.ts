@@ -1,5 +1,5 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
-import { AdminDecisionSchema, RequestStatus } from "@timesheet/shared";
+import { AdminDecisionSchema, RequestStatus, addDaysStr } from "@timesheet/shared";
 import * as data from "../db/data.js";
 import { requireAdmin, isMaster } from "../services/session.js";
 import { jibbleClient } from "../services/jibbleClient.js";
@@ -135,9 +135,30 @@ function accrualReason(from: string, to: string, regHrs: number, pto: number, ra
 interface AccrualItem {
   personId: string;
   name: string;
+  /** Regular (non-overtime) hours — each week capped at 40. */
   regHrs: number;
+  /** Overtime hours excluded from accrual (weekly hours over 40). */
+  otHrs: number;
   pto: number;
   reason: string;
+}
+
+const WEEKLY_OT_THRESHOLD = 40;
+
+/** 7-day weeks covering [from, to] (from is the Sunday-aligned period start). */
+function weeksOf(from: string, to: string): string[][] {
+  const weeks: string[][] = [];
+  let wStart = from;
+  while (wStart <= to) {
+    const days: string[] = [];
+    for (let i = 0; i < 7; i++) {
+      const d = addDaysStr(wStart, i);
+      if (d <= to) days.push(d);
+    }
+    weeks.push(days);
+    wStart = addDaysStr(wStart, 7);
+  }
+  return weeks;
 }
 
 async function buildAccrual(from: string, to: string, rate: number): Promise<{ from: string; to: string; rate: number; policyId: string; items: AccrualItem[] }> {
@@ -149,10 +170,21 @@ async function buildAccrual(from: string, to: string, rate: number): Promise<{ f
     jibbleClient.getWorkedHoursByPerson(from, to),
   ]);
   const nameById = new Map(people.map((p) => [p.id, p.fullName]));
+  const weeks = weeksOf(from, to);
   const items: AccrualItem[] = assignees.map((personId) => {
-    const regHrs = round2(hoursByPerson.get(personId) ?? 0);
+    const perDay = hoursByPerson.get(personId) ?? new Map<string, number>();
+    let reg = 0;
+    let total = 0;
+    // Overtime is weekly (>40 hrs/week); regular hours cap each week at 40.
+    for (const week of weeks) {
+      const wh = week.reduce((sum, d) => sum + (perDay.get(d) ?? 0), 0);
+      total += wh;
+      reg += Math.min(wh, WEEKLY_OT_THRESHOLD);
+    }
+    const regHrs = round2(reg);
+    const otHrs = round2(Math.max(0, total - reg));
     const pto = round2(regHrs * rate);
-    return { personId, name: nameById.get(personId) ?? personId, regHrs, pto, reason: accrualReason(from, to, regHrs, pto, rate) };
+    return { personId, name: nameById.get(personId) ?? personId, regHrs, otHrs, pto, reason: accrualReason(from, to, regHrs, pto, rate) };
   });
   items.sort((a, b) => a.name.localeCompare(b.name));
   return { from, to, rate, policyId, items };

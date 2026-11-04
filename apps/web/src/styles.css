@@ -1096,3 +1096,5 @@ code {
 .accrual-pto { font-weight: 800; font-family: "Archivo", sans-serif; color: #1f8f4e; }
 .accrual-skip { opacity: 0.5; }
 .accrual-sample { margin: 0.75rem 0.2rem 0; font-style: italic; font-size: 0.82rem; }
+
+.accrual-ot { color: #b2541a; font-weight: 700; }

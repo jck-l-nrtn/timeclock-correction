@@ -109,13 +109,14 @@ export function PtoAccrual() {
         <div className="accrual-table-wrap">
           <table className="accrual-table">
             <thead>
-              <tr><th>Employee</th><th>Reg hrs</th><th>× {preview.rate}</th><th>PTO</th></tr>
+              <tr><th>Employee</th><th>Reg hrs</th><th>OT (excl.)</th><th>× {preview.rate}</th><th>PTO</th></tr>
             </thead>
             <tbody>
               {preview.items.map((i) => (
                 <tr key={i.personId} className={i.pto <= 0 ? "accrual-skip" : ""}>
                   <td>{i.name}</td>
                   <td className="num">{n2(i.regHrs)}</td>
+                  <td className="num">{i.otHrs > 0 ? <span className="accrual-ot">{n2(i.otHrs)}</span> : <span className="muted">—</span>}</td>
                   <td className="num muted">{i.pto > 0 ? "=" : "—"}</td>
                   <td className="num accrual-pto">{i.pto > 0 ? `+${n2(i.pto)}` : "0"}</td>
                 </tr>

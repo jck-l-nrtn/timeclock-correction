@@ -126,8 +126,9 @@ export interface JibbleClient {
   getPolicyAssignees(policyId: string): Promise<string[]>;
   /** Total worked hours (paired in→out) for a person in a date range. */
   workedHours(personId: string, from: string, to: string): Promise<number>;
-  /** Worked hours for ALL people in a range, as personId → hours (one bulk query). */
-  getWorkedHoursByPerson(from: string, to: string): Promise<Map<string, number>>;
+  /** Worked hours for ALL people in a range as personId → (clock-in day → hours),
+   *  from one bulk query — lets the caller apply weekly overtime caps. */
+  getWorkedHoursByPerson(from: string, to: string): Promise<Map<string, Map<string, number>>>;
   /** Add a manual amendment to a person's entitlement on a policy (the comment = reason). */
   amendEntitlement(policyId: string, personId: string, amount: number, reason: string): Promise<void>;
   /** The organization's upcoming paid holidays. */
@@ -198,7 +199,7 @@ export class StubJibbleClient implements JibbleClient {
     return 0;
   }
 
-  async getWorkedHoursByPerson(): Promise<Map<string, number>> {
+  async getWorkedHoursByPerson(): Promise<Map<string, Map<string, number>>> {
     return new Map();
   }
 
@@ -481,43 +482,43 @@ export class HttpJibbleClient implements JibbleClient {
     return total;
   }
 
-  async getWorkedHoursByPerson(from: string, to: string): Promise<Map<string, number>> {
+  async getWorkedHoursByPerson(from: string, to: string): Promise<Map<string, Map<string, number>>> {
     const filter = encodeURIComponent(`belongsToDate ge ${from} and belongsToDate le ${to}`);
     let url =
       `${this.cfg.baseTimeTrackingUrl}/v1/TimeEntries?$filter=${filter}` +
-      `&$orderby=${encodeURIComponent("time asc")}&$select=personId,type,time&$top=1000`;
-    const rows: Array<{ personId: string; type: string; time: string }> = [];
+      `&$orderby=${encodeURIComponent("time asc")}&$select=personId,type,time,belongsToDate&$top=1000`;
+    type Row = { personId: string; type: string; time: string; belongsToDate: string };
+    const rows: Row[] = [];
     for (let page = 0; url && page < 25; page++) {
       const res = await this.jfetch(url);
       if (!res.ok) throw new Error(`Jibble bulk entries failed (${res.status})`);
-      const j = (await res.json()) as {
-        value?: Array<{ personId: string; type: string; time: string }>;
-        ["@odata.nextLink"]?: string;
-      };
+      const j = (await res.json()) as { value?: Row[]; ["@odata.nextLink"]?: string };
       rows.push(...(j.value ?? []));
       url = j["@odata.nextLink"] ?? "";
     }
-    const byPerson = new Map<string, Array<{ type: string; time: string }>>();
+    const byPerson = new Map<string, Row[]>();
     for (const r of rows) {
       const list = byPerson.get(r.personId) ?? [];
-      list.push({ type: r.type, time: r.time });
+      list.push(r);
       byPerson.set(r.personId, list);
     }
-    const hours = new Map<string, number>();
+    // Pair in→out in time order; attribute each shift's hours to the clock-in day.
+    const perPerson = new Map<string, Map<string, number>>();
     for (const [pid, list] of byPerson) {
       list.sort((a, b) => a.time.localeCompare(b.time));
-      let total = 0;
-      let open: { time: string } | null = null;
+      const perDay = new Map<string, number>();
+      let open: Row | null = null;
       for (const e of list) {
         if (e.type.toLowerCase() === "in") open = e;
         else if (open) {
-          total += (new Date(e.time).getTime() - new Date(open.time).getTime()) / 3600000;
+          const hrs = (new Date(e.time).getTime() - new Date(open.time).getTime()) / 3600000;
+          perDay.set(open.belongsToDate, (perDay.get(open.belongsToDate) ?? 0) + hrs);
           open = null;
         }
       }
-      hours.set(pid, total);
+      perPerson.set(pid, perDay);
     }
-    return hours;
+    return perPerson;
   }
 
   async amendEntitlement(policyId: string, personId: string, amount: number, reason: string): Promise<void> {

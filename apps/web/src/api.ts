@@ -309,6 +309,7 @@ export interface AccrualItem {
   personId: string;
   name: string;
   regHrs: number;
+  otHrs: number;
   pto: number;
   reason: string;
 }
