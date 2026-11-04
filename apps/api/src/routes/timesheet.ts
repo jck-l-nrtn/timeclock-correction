@@ -22,17 +22,22 @@ timesheetRouter.get("/", async (req, res) => {
     return res.status(400).json({ error: "invalid_date_range" });
   }
 
-  // Use the linked Jibble person id when we have it; otherwise resolve by email.
-  let person: { id: string; fullName: string; email: string };
-  if (emp.jibblePersonId) {
-    person = { id: emp.jibblePersonId, fullName: emp.fullName, email: emp.email };
-  } else {
-    const p = await jibbleClient.findPersonByEmail(emp.email);
-    if (!p) return res.status(404).json({ error: "no_jibble_person", email: emp.email });
-    person = { id: p.id, fullName: p.fullName, email: p.email };
-  }
+  try {
+    // Use the linked Jibble person id when we have it; otherwise resolve by email.
+    let person: { id: string; fullName: string; email: string };
+    if (emp.jibblePersonId) {
+      person = { id: emp.jibblePersonId, fullName: emp.fullName, email: emp.email };
+    } else {
+      const p = await jibbleClient.findPersonByEmail(emp.email);
+      if (!p) return res.status(404).json({ error: "no_jibble_person", email: emp.email });
+      person = { id: p.id, fullName: p.fullName, email: p.email };
+    }
 
-  const entries = await jibbleClient.listEntries(person.id, from, to);
-  const body: TimesheetDTO = { person, from, to, entries };
-  return res.json(body);
+    const entries = await jibbleClient.listEntries(person.id, from, to);
+    const body: TimesheetDTO = { person, from, to, entries };
+    return res.json(body);
+  } catch (err) {
+    console.error("[timesheet] load failed:", err);
+    return res.status(502).json({ error: "timesheet_unavailable" });
+  }
 });

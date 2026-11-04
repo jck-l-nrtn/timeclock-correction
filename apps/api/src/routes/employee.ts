@@ -54,10 +54,10 @@ employeeRouter.get("/profile", async (req, res) => {
 employeeRouter.get("/pto", async (req, res) => {
   const emp = await resolveEmployee(req);
   if (!emp) return res.status(401).json({ error: "unauthenticated" });
-  const personId =
-    emp.jibblePersonId ?? (await jibbleClient.findPersonByEmail(emp.email))?.id ?? null;
-  if (!personId) return res.json([]);
   try {
+    const personId =
+      emp.jibblePersonId ?? (await jibbleClient.findPersonByEmail(emp.email))?.id ?? null;
+    if (!personId) return res.json([]);
     return res.json(await jibbleClient.getLeaveBalances(personId));
   } catch (err) {
     console.error("[employee] pto lookup failed:", err);

@@ -92,7 +92,13 @@ export function masterPerson(): PersonItem {
 export async function currentPerson(req: Request): Promise<PersonItem | null> {
   const email = readSessionEmail(req);
   if (!email) return null;
-  if (isMaster(email)) return masterPerson();
+  if (isMaster(email)) {
+    // Merge with the real person record if one exists, so the master gets their
+    // real name + jibblePersonId (avoids re-resolving Jibble on every call) while
+    // always keeping admin rights.
+    const real = await getPersonByEmail(email);
+    return real ? { ...real, isAdmin: true, active: true } : masterPerson();
+  }
   return getPersonByEmail(email);
 }
 

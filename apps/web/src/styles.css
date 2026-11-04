@@ -971,3 +971,56 @@ code {
   .stat-big { font-size: 1.7rem; }
   .clock-date { display: none; }
 }
+
+/* ===== Pay-period calendar (employee timesheet) ===== */
+.ts-page { max-width: 920px; }
+.pp-week { margin-bottom: 1rem; }
+.pp-week-head { display: flex; align-items: baseline; justify-content: space-between; padding: 0 0.15rem 0.4rem; }
+.pp-week-label { font-family: "Archivo", sans-serif; font-weight: 700; font-size: 0.95rem; }
+.pp-week-hours { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--accent-strong); font-size: 0.9rem; }
+.pp-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.pp-day {
+  display: flex; flex-direction: column; gap: 4px; min-height: 104px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 7px 7px 6px; text-align: left; font: inherit; cursor: pointer;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.pp-day:hover { border-color: var(--accent); box-shadow: 0 2px 8px rgba(51,154,213,0.12); }
+.pp-empty { background: var(--surface-2); }
+.pp-today { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.pp-sel { border-color: var(--accent-strong); box-shadow: 0 0 0 2px var(--accent-tint); }
+.pp-day-top { display: flex; align-items: baseline; justify-content: space-between; }
+.pp-dow { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); }
+.pp-num { font-family: "Archivo", sans-serif; font-weight: 700; font-size: 1rem; color: var(--text); }
+.pp-today .pp-num { color: var(--accent-strong); }
+.pp-day-body { display: flex; flex-direction: column; gap: 3px; flex: 1; }
+.pp-seg { font-size: 0.74rem; font-variant-numeric: tabular-nums; color: var(--text); white-space: nowrap; }
+.pp-dash { color: var(--muted); margin: 0 2px; }
+.pp-seg em { color: #1f8f4e; font-style: normal; font-weight: 700; }
+.pp-tag { font-size: 0.66rem; font-weight: 600; border-radius: 5px; padding: 1px 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tag-holiday { background: var(--amber-bg); color: #8a5a00; }
+.tag-pto { background: var(--green-bg); color: var(--green-fg); }
+.tag-pto-pending { background: var(--slate-bg); color: var(--slate-fg); }
+.tag-pending { background: var(--accent-tint); color: var(--accent-strong); }
+.pp-day-hours { margin-top: auto; text-align: right; font-weight: 700; font-size: 0.78rem; font-variant-numeric: tabular-nums; color: var(--accent-strong); }
+
+/* Day detail sheet */
+.day-sheet { margin-top: 0.5rem; }
+.day-sheet-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem; }
+.day-sheet-head h2 { margin: 0; font-size: 1.1rem; }
+.punch-list { list-style: none; padding: 0; margin: 0.5rem 0 0; display: flex; flex-direction: column; gap: 0.4rem; }
+.punch-row { display: flex; align-items: center; gap: 0.7rem; padding: 0.55rem 0.7rem; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; }
+.punch-pill { font-size: 0.72rem; font-weight: 700; border-radius: 999px; padding: 0.2rem 0.6rem; }
+.punch-in { background: rgba(31,143,78,0.14); color: #1f8f4e; }
+.punch-out { background: rgba(178,84,26,0.14); color: #b2541a; }
+.punch-time { font-family: "Archivo", sans-serif; font-weight: 700; font-variant-numeric: tabular-nums; font-size: 1.05rem; }
+.punch-locked { margin-left: auto; font-size: 0.85rem; }
+.punch-row .btn-link { margin-left: auto; }
+.day-sheet-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; }
+
+@media (max-width: 680px) {
+  .pp-grid { gap: 4px; }
+  .pp-day { min-height: 82px; padding: 5px; border-radius: 9px; }
+  .pp-seg { font-size: 0.64rem; }
+  .pp-num { font-size: 0.85rem; }
+}

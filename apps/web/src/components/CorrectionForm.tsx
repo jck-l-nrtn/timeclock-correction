@@ -25,6 +25,10 @@ interface CorrectionFormProps {
   lockEmail?: boolean;
   /** Hide name/email inputs entirely — identity comes from the login session. */
   hideIdentity?: boolean;
+  /** Make the date read-only (prefilled from a calendar day). */
+  lockDate?: boolean;
+  /** Hide the clock-in/out/adjust selector (the caller already chose). */
+  lockEventType?: boolean;
   heading?: string;
   subheading?: string;
   /** If provided, called on success (parent handles the "done" state). Otherwise
@@ -52,6 +56,8 @@ export function CorrectionForm({
   initial,
   lockEmail,
   hideIdentity,
+  lockDate,
+  lockEventType,
   heading = "Report a missed timeclock",
   subheading = "Forgot to clock in or out, or need a time corrected? Fill this out and an admin will review it.",
   onSubmitted,
@@ -171,9 +177,17 @@ export function CorrectionForm({
 
         <div className="row">
           <Field label="Date" error={errors.date}>
-            <input type="date" value={form.date} onChange={(e) => update("date", e.target.value)} />
+            <input
+              type="date"
+              value={form.date}
+              readOnly={lockDate}
+              onChange={(e) => update("date", e.target.value)}
+            />
           </Field>
-          <Field label={isEdit ? "Corrected time" : "Intended time"} error={errors.intendedTime}>
+          <Field
+            label={isEdit ? "Corrected time" : form.eventType === EventType.ClockIn ? "Clock-in time" : form.eventType === EventType.ClockOut ? "Clock-out time" : "Intended time"}
+            error={errors.intendedTime}
+          >
             <input
               type="time"
               value={form.intendedTime}
@@ -182,7 +196,7 @@ export function CorrectionForm({
           </Field>
         </div>
 
-        {!isEdit && (
+        {!isEdit && !lockEventType && (
           <Field label="What happened?" error={errors.eventType}>
             <select
               value={form.eventType}

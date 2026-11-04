@@ -244,6 +244,20 @@ export function localWallToJibbleTime(
 export class HttpJibbleClient implements JibbleClient {
   private readonly cfg = config.jibble;
   private tokenCache: { value: string; expiresAt: number } | null = null;
+  // Short-lived caches so a page that fires several calls doesn't re-hit Jibble
+  // for the same person/timezone (the main cause of 429 rate-limit storms).
+  private personCache = new Map<string, { at: number; val: JibblePerson | null }>();
+  private tzCache = new Map<string, { at: number; val: string }>();
+  private static readonly CACHE_TTL_MS = 5 * 60_000;
+
+  /** GET with one retry on 429 (Jibble rate limit). */
+  private async jfetch(url: string): Promise<Response> {
+    for (let attempt = 0; ; attempt++) {
+      const res = await fetch(url, { headers: await this.authHeaders() });
+      if (res.status !== 429 || attempt >= 2) return res;
+      await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+    }
+  }
 
   private async getToken(): Promise<string> {
     // Reuse the cached token until 60s before it expires.
@@ -273,16 +287,23 @@ export class HttpJibbleClient implements JibbleClient {
   }
 
   async findPersonByEmail(email: string): Promise<JibblePerson | null> {
+    const key = email.trim().toLowerCase();
+    const cached = this.personCache.get(key);
+    if (cached && Date.now() - cached.at < HttpJibbleClient.CACHE_TTL_MS) return cached.val;
+
     const filter = encodeURIComponent(`email eq '${email.replace(/'/g, "''")}'`);
     const url = `${this.cfg.baseWorkspaceUrl}/v1/People?$filter=${filter}&$select=id,fullName,email`;
-    const res = await fetch(url, { headers: await this.authHeaders() });
+    const res = await this.jfetch(url);
     if (!res.ok) throw new Error(`Jibble people lookup failed (${res.status})`);
     const json = (await res.json()) as {
       value: { id: string; fullName: string; email: string }[];
     };
     const p = json.value?.[0];
-    if (!p) return null;
-    return { id: p.id, fullName: p.fullName, email: p.email, timeZone: await this.resolveTimeZone(p.id) };
+    const val: JibblePerson | null = p
+      ? { id: p.id, fullName: p.fullName, email: p.email, timeZone: await this.resolveTimeZone(p.id) }
+      : null;
+    this.personCache.set(key, { at: Date.now(), val });
+    return val;
   }
 
   async listPeople(): Promise<JibblePersonSummary[]> {
@@ -451,21 +472,25 @@ export class HttpJibbleClient implements JibbleClient {
 
   /** Best-effort per-person timezone from the time-tracking People projection. */
   private async resolveTimeZone(personId: string): Promise<string> {
+    const cached = this.tzCache.get(personId);
+    if (cached && Date.now() - cached.at < HttpJibbleClient.CACHE_TTL_MS) return cached.val;
+    let tz = this.cfg.orgTimeZone;
     try {
       const filter = encodeURIComponent(`id eq ${personId}`);
       const url = `${this.cfg.baseTimeTrackingUrl}/v1/People?$filter=${filter}&$select=timeZone,timeSheetTimeZone`;
-      const res = await fetch(url, { headers: await this.authHeaders() });
+      const res = await this.jfetch(url);
       if (res.ok) {
         const json = (await res.json()) as {
           value: { timeZone?: string; timeSheetTimeZone?: string }[];
         };
         const row = json.value?.[0];
-        return row?.timeSheetTimeZone || row?.timeZone || this.cfg.orgTimeZone;
+        tz = row?.timeSheetTimeZone || row?.timeZone || this.cfg.orgTimeZone;
       }
     } catch {
       /* fall through to org default */
     }
-    return this.cfg.orgTimeZone;
+    this.tzCache.set(personId, { at: Date.now(), val: tz });
+    return tz;
   }
 
   async applyCorrection(request: CorrectionRequestDTO): Promise<ApplyResult> {
