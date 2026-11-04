@@ -14,6 +14,7 @@ function kindLabel(r: CorrectionRequestDTO): string {
 
 function summarize(r: CorrectionRequestDTO): string {
   if (r.kind === "timeoff") {
+    if (r.ptoType === "payout") return `PTO payout — ${r.payoutHours ?? 0} hours`;
     const t = r.ptoType ? r.ptoType[0].toUpperCase() + r.ptoType.slice(1) : "Time off";
     const range =
       r.endDate && r.endDate !== r.startDate ? `${r.startDate} to ${r.endDate}` : r.startDate;

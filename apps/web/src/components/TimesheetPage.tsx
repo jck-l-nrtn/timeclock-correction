@@ -10,6 +10,8 @@ import {
   type TimesheetEntryDTO,
 } from "@timesheet/shared";
 import {
+  adminFetchRequests,
+  adminFetchTimesheet,
   fetchHolidays,
   fetchMyRequests,
   fetchPayPeriod,
@@ -17,6 +19,8 @@ import {
   type EmployeeProfile,
   type PayPeriodDef,
 } from "../api.js";
+import { StatusBadge } from "./StatusBadge.js";
+import { summarizeRequest } from "../labels.js";
 import {
   entryHHmm,
   fmtHM,
@@ -63,7 +67,12 @@ type Modal =
   | { kind: "add"; heading: string; initial: CorrectionFormInitial }
   | null;
 
-export function TimesheetPage({ profile }: { profile: EmployeeProfile }) {
+export function TimesheetPage({ profile, adminEmail }: { profile: EmployeeProfile; adminEmail?: string }) {
+  const readOnly = Boolean(adminEmail);
+  const loadTs = adminEmail
+    ? (f: string, t: string) => adminFetchTimesheet(adminEmail, f, t)
+    : fetchTimesheet;
+  const loadReqs = adminEmail ? () => adminFetchRequests(adminEmail) : fetchMyRequests;
   const [def, setDef] = useState<PayPeriodDef | null>(null);
   const [offset, setOffset] = useState(0);
   const [entries, setEntries] = useState<TimesheetEntryDTO[] | null>(null);
@@ -78,9 +87,9 @@ export function TimesheetPage({ profile }: { profile: EmployeeProfile }) {
   useEffect(() => {
     Promise.all([
       fetchPayPeriod(),
-      fetchTimesheet(todayYmd(), todayYmd()).catch(() => null),
+      loadTs(todayYmd(), todayYmd()).catch(() => null),
       fetchHolidays().catch(() => []),
-      fetchMyRequests().catch(() => []),
+      loadReqs().catch(() => []),
     ])
       .then(([d, t, hols, reqs]) => {
         setDef(d);
@@ -103,7 +112,7 @@ export function TimesheetPage({ profile }: { profile: EmployeeProfile }) {
     setError(null);
     setSelected(null);
     // Fetch one extra day on each side so overnight shifts pair across midnight.
-    fetchTimesheet(addDaysStr(period.start, -1), addDaysStr(period.end, 1))
+    loadTs(addDaysStr(period.start, -1), addDaysStr(period.end, 1))
       .then((t) => setEntries(t.entries))
       .catch((e) => setError(e instanceof Error ? e.message : "Failed to load timesheet"))
       .finally(() => setLoading(false));
@@ -270,6 +279,32 @@ export function TimesheetPage({ profile }: { profile: EmployeeProfile }) {
         </div>
       )}
 
+      {/* Correction request statuses */}
+      {(() => {
+        const corr = requests
+          .filter((r) => r.kind === "correction")
+          .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+        if (corr.length === 0) return null;
+        return (
+          <section className="card" style={{ marginTop: "1.25rem" }}>
+            <h2 style={{ marginTop: 0, fontSize: "1.05rem" }}>{readOnly ? "Correction requests" : "My correction requests"}</h2>
+            <ul className="req-list">
+              {corr.slice(0, 12).map((r) => (
+                <li key={r.id} className="req-row">
+                  <div className="req-main">
+                    <div className="req-summary">{summarizeRequest(r)}</div>
+                    {(r.decisionNote || r.jibbleResult) && (
+                      <div className="muted req-note">{r.decisionNote || r.jibbleResult}</div>
+                    )}
+                  </div>
+                  <StatusBadge status={r.status} />
+                </li>
+              ))}
+            </ul>
+          </section>
+        );
+      })()}
+
       {/* Day detail / actions */}
       {selected && (
         <section className="card day-sheet">
@@ -295,7 +330,7 @@ export function TimesheetPage({ profile }: { profile: EmployeeProfile }) {
                     {e.isManual && <span className="badge badge-approved">manual</span>}
                     {e.isLocked ? (
                       <span className="punch-locked muted">🔒 locked</span>
-                    ) : (
+                    ) : readOnly ? null : (
                       <button className="btn-link" onClick={() => fix(e)}>Fix</button>
                     )}
                   </li>
@@ -303,9 +338,11 @@ export function TimesheetPage({ profile }: { profile: EmployeeProfile }) {
               </ul>
             );
           })()}
-          <div className="day-sheet-actions">
-            <button className="btn-secondary btn-inline" onClick={() => addShift(selected)}>+ Add missing shift</button>
-          </div>
+          {!readOnly && (
+            <div className="day-sheet-actions">
+              <button className="btn-secondary btn-inline" onClick={() => addShift(selected)}>+ Add missing shift</button>
+            </div>
+          )}
         </section>
       )}
 
@@ -336,10 +373,10 @@ export function TimesheetPage({ profile }: { profile: EmployeeProfile }) {
   );
 
   function reloadRequests() {
-    fetchMyRequests().then(setRequests).catch(() => {});
+    loadReqs().then(setRequests).catch(() => {});
   }
   function reloadAll() {
     reloadRequests();
-    if (period) fetchTimesheet(period.start, period.end).then((t) => setEntries(t.entries)).catch(() => {});
+    if (period) loadTs(period.start, period.end).then((t) => setEntries(t.entries)).catch(() => {});
   }
 }

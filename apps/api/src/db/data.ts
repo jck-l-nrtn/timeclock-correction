@@ -254,6 +254,7 @@ export interface RequestItem {
   ptoType: string | null;
   startDate: string | null;
   endDate: string | null;
+  payoutHours: number | null;
   reason: string;
   affirmed: boolean;
   status: string;
@@ -325,6 +326,7 @@ export async function createRequest(input: {
     ptoType: null,
     startDate: null,
     endDate: null,
+    payoutHours: null,
     reason: input.reason,
     affirmed: input.affirmed,
     status: "pending",
@@ -349,8 +351,9 @@ export async function createPtoRequest(input: {
   employeeEmail: string;
   jibblePersonId: string | null;
   ptoType: string;
-  startDate: string;
-  endDate: string;
+  startDate: string | null;
+  endDate: string | null;
+  payoutHours?: number | null;
   reason: string;
 }): Promise<RequestItem> {
   const ts = now();
@@ -361,13 +364,14 @@ export async function createPtoRequest(input: {
     employeeEmail: norm(input.employeeEmail),
     jibblePersonId: input.jibblePersonId,
     jibbleEntryId: null,
-    date: input.startDate, // for index sorting
+    date: input.startDate ?? ts.slice(0, 10), // for index sorting
     eventType: "adjust", // unused for PTO
     intendedTime: "00:00", // unused for PTO
     endTime: null,
     ptoType: input.ptoType,
     startDate: input.startDate,
     endDate: input.endDate,
+    payoutHours: input.payoutHours ?? null,
     reason: input.reason,
     affirmed: true,
     status: "pending",

@@ -15,6 +15,7 @@ export function toCorrectionRequestDTO(row: RequestItem): CorrectionRequestDTO {
     intendedTime: row.intendedTime,
     endTime: row.endTime ?? null,
     ptoType: row.ptoType ?? null,
+    payoutHours: row.payoutHours ?? null,
     startDate: row.startDate ?? null,
     endDate: row.endDate ?? null,
     reason: row.reason,

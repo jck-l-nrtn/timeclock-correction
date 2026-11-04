@@ -113,6 +113,62 @@ adminRouter.put("/people/:email", requireMaster, async (req, res) => {
   return res.json(personView(updated!));
 });
 
+// ---- View any employee (read-only) ----------------------------------------
+
+async function personIdFor(email: string): Promise<string | null> {
+  const p = await data.getPersonByEmail(email);
+  if (p?.jibblePersonId) return p.jibblePersonId;
+  return (await jibbleClient.findPersonByEmail(email))?.id ?? null;
+}
+
+/** GET /api/admin/employee/:email/timesheet?from&to */
+adminRouter.get("/employee/:email/timesheet", async (req, res) => {
+  const email = req.params.email;
+  const from = typeof req.query.from === "string" ? req.query.from : "";
+  const to = typeof req.query.to === "string" ? req.query.to : "";
+  if (!DATE_RE.test(from) || !DATE_RE.test(to)) return res.status(400).json({ error: "invalid_date_range" });
+  try {
+    const person = await data.getPersonByEmail(email);
+    const personId = await personIdFor(email);
+    if (!personId) return res.status(404).json({ error: "no_jibble_person" });
+    const entries = await jibbleClient.listEntries(personId, from, to);
+    return res.json({ person: { id: personId, fullName: person?.fullName ?? email, email }, from, to, entries });
+  } catch (err) {
+    console.error("[admin] employee timesheet failed:", err);
+    return res.status(502).json({ error: "timesheet_unavailable" });
+  }
+});
+
+/** GET /api/admin/employee/:email/pto */
+adminRouter.get("/employee/:email/pto", async (req, res) => {
+  try {
+    const personId = await personIdFor(req.params.email);
+    if (!personId) return res.json([]);
+    return res.json(await jibbleClient.getLeaveBalances(personId));
+  } catch (err) {
+    console.error("[admin] employee pto failed:", err);
+    return res.status(502).json({ error: "pto_unavailable" });
+  }
+});
+
+/** GET /api/admin/employee/:email/pto-history */
+adminRouter.get("/employee/:email/pto-history", async (req, res) => {
+  try {
+    const personId = await personIdFor(req.params.email);
+    if (!personId) return res.json([]);
+    return res.json(await jibbleClient.getLeaveHistory(personId));
+  } catch (err) {
+    console.error("[admin] employee pto-history failed:", err);
+    return res.status(502).json({ error: "pto_history_unavailable" });
+  }
+});
+
+/** GET /api/admin/employee/:email/requests — their correction + time-off requests. */
+adminRouter.get("/employee/:email/requests", async (req, res) => {
+  const rows = await data.listRequestsByEmployee(req.params.email);
+  return res.json(rows.map(toCorrectionRequestDTO));
+});
+
 // ---- Bulk PTO accrual (master only) ---------------------------------------
 
 const round2 = (n: number) => Math.round(n * 100) / 100;

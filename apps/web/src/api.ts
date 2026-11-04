@@ -303,6 +303,30 @@ export async function adminCreateEmployee(
   return (await res.json()) as { account: EmployeeAccount };
 }
 
+// ---- Admin: view any employee (read-only) ---------------------------------
+
+export async function adminFetchTimesheet(email: string, from: string, to: string): Promise<TimesheetDTO> {
+  const qs = new URLSearchParams({ from, to });
+  const res = await fetch(`/api/admin/employee/${encodeURIComponent(email)}/timesheet?${qs}`, { credentials: "include" });
+  if (!res.ok) throw new ApiError(`Failed to load timesheet (${res.status})`, res.status);
+  return (await res.json()) as TimesheetDTO;
+}
+export async function adminFetchPto(email: string): Promise<PtoBalanceDTO[]> {
+  const res = await fetch(`/api/admin/employee/${encodeURIComponent(email)}/pto`, { credentials: "include" });
+  if (!res.ok) throw new ApiError(`Failed to load PTO (${res.status})`, res.status);
+  return (await res.json()) as PtoBalanceDTO[];
+}
+export async function adminFetchPtoHistory(email: string): Promise<LeaveHistoryDTO[]> {
+  const res = await fetch(`/api/admin/employee/${encodeURIComponent(email)}/pto-history`, { credentials: "include" });
+  if (!res.ok) throw new ApiError(`Failed to load history (${res.status})`, res.status);
+  return (await res.json()) as LeaveHistoryDTO[];
+}
+export async function adminFetchRequests(email: string): Promise<CorrectionRequestDTO[]> {
+  const res = await fetch(`/api/admin/employee/${encodeURIComponent(email)}/requests`, { credentials: "include" });
+  if (!res.ok) throw new ApiError(`Failed to load requests (${res.status})`, res.status);
+  return (await res.json()) as CorrectionRequestDTO[];
+}
+
 // ---- Bulk PTO accrual (master admin) --------------------------------------
 
 export interface AccrualItem {

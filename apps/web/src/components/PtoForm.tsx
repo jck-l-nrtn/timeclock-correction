@@ -20,24 +20,36 @@ export function PtoForm({
   const [ptoType, setPtoType] = useState<string>(PtoType.Vacation);
   const [startDate, setStartDate] = useState(initialStart);
   const [endDate, setEndDate] = useState(initialEnd);
+  const [payoutHours, setPayoutHours] = useState("");
   const [reason, setReason] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
 
+  const isPayout = ptoType === PtoType.Payout;
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitError(null);
-    const payload = {
-      employeeName,
-      employeeEmail,
-      jibblePersonId: jibblePersonId || undefined,
-      ptoType,
-      startDate,
-      endDate: endDate || startDate,
-      reason,
-    };
+    const payload = isPayout
+      ? {
+          employeeName,
+          employeeEmail,
+          jibblePersonId: jibblePersonId || undefined,
+          ptoType,
+          payoutHours: payoutHours ? Number(payoutHours) : undefined,
+          reason,
+        }
+      : {
+          employeeName,
+          employeeEmail,
+          jibblePersonId: jibblePersonId || undefined,
+          ptoType,
+          startDate,
+          endDate: endDate || startDate,
+          reason,
+        };
     const parsed = CreatePtoRequestSchema.safeParse(payload);
     if (!parsed.success) {
       const fe: Record<string, string> = {};
@@ -67,7 +79,7 @@ export function PtoForm({
   if (done) {
     return (
       <div className="notice" style={{ marginTop: "1rem" }}>
-        ✓ Time-off request submitted — your manager will review it. Track it under <strong>My Requests</strong>.
+        ✓ Request submitted — your manager will review it. Track its status below.
         <div style={{ marginTop: "0.75rem" }}>
           <button className="btn-secondary btn-inline" onClick={() => setDone(false)}>
             Submit another
@@ -86,26 +98,42 @@ export function PtoForm({
           <option value="sick">Sick</option>
           <option value="unpaid">Unpaid</option>
           <option value="other">Other</option>
+          <option value="payout">Pay out hours (cash out)</option>
         </select>
         {errors.ptoType && <span className="field-error">{errors.ptoType}</span>}
       </label>
 
-      <div className="row">
+      {isPayout ? (
         <label className="field">
-          <span className="field-label">Start date</span>
-          <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-          {errors.startDate && <span className="field-error">{errors.startDate}</span>}
+          <span className="field-label">Hours to pay out</span>
+          <input
+            type="number"
+            min="0"
+            step="0.25"
+            value={payoutHours}
+            onChange={(e) => setPayoutHours(e.target.value)}
+            placeholder="e.g. 16"
+          />
+          {errors.payoutHours && <span className="field-error">{errors.payoutHours}</span>}
         </label>
-        <label className="field">
-          <span className="field-label">End date</span>
-          <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-          {errors.endDate && <span className="field-error">{errors.endDate}</span>}
-        </label>
-      </div>
+      ) : (
+        <div className="row">
+          <label className="field">
+            <span className="field-label">Start date</span>
+            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+            {errors.startDate && <span className="field-error">{errors.startDate}</span>}
+          </label>
+          <label className="field">
+            <span className="field-label">End date</span>
+            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+            {errors.endDate && <span className="field-error">{errors.endDate}</span>}
+          </label>
+        </div>
+      )}
 
       <label className="field">
         <span className="field-label">Reason / notes</span>
-        <textarea rows={3} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Family vacation" />
+        <textarea rows={3} value={reason} onChange={(e) => setReason(e.target.value)} placeholder={isPayout ? "e.g. Cashing out unused PTO" : "e.g. Family vacation"} />
         {errors.reason && <span className="field-error">{errors.reason}</span>}
       </label>
 

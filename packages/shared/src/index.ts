@@ -36,6 +36,8 @@ export const PtoType = {
   Sick: "sick",
   Unpaid: "unpaid",
   Other: "other",
+  /** Cash out a number of PTO hours (no dates). */
+  Payout: "payout",
 } as const;
 export type PtoType = (typeof PtoType)[keyof typeof PtoType];
 
@@ -79,17 +81,29 @@ export const CreateCorrectionRequestSchema = z
 export type CreateCorrectionRequest = z.infer<typeof CreateCorrectionRequestSchema>;
 
 /** Payload the employee's time-off (PTO) form POSTs to the API. */
+const YMD = /^\d{4}-\d{2}-\d{2}$/;
 export const CreatePtoRequestSchema = z
   .object({
     employeeName: z.string().min(1, "Name is required").max(120),
     jibblePersonId: z.string().max(120).optional(),
     employeeEmail: z.string().email("A valid email is required"),
-    ptoType: z.enum([PtoType.Vacation, PtoType.Sick, PtoType.Unpaid, PtoType.Other]),
-    startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD"),
-    endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD"),
+    ptoType: z.enum([PtoType.Vacation, PtoType.Sick, PtoType.Unpaid, PtoType.Other, PtoType.Payout]),
+    /** Date-based time off (required unless payout). */
+    startDate: z.string().regex(YMD, "Expected YYYY-MM-DD").nullish(),
+    endDate: z.string().regex(YMD, "Expected YYYY-MM-DD").nullish(),
+    /** Number of PTO hours to cash out (payout requests only). */
+    payoutHours: z.number().positive("Enter a number of hours").max(2000).nullish(),
     reason: z.string().min(2, "Please give a brief reason").max(1000),
   })
-  .refine((d) => d.endDate >= d.startDate, {
+  .refine((d) => d.ptoType !== PtoType.Payout || (d.payoutHours ?? 0) > 0, {
+    message: "Enter how many hours to pay out",
+    path: ["payoutHours"],
+  })
+  .refine((d) => d.ptoType === PtoType.Payout || (!!d.startDate && !!d.endDate), {
+    message: "Pick the start and end dates",
+    path: ["startDate"],
+  })
+  .refine((d) => d.ptoType === PtoType.Payout || !d.startDate || !d.endDate || d.endDate >= d.startDate, {
     message: "End date must be on or after the start date",
     path: ["endDate"],
   });
@@ -182,6 +196,8 @@ export interface CorrectionRequestDTO {
   ptoType: string | null;
   startDate: string | null;
   endDate: string | null;
+  /** Hours to cash out (payout PTO requests only). */
+  payoutHours: number | null;
   reason: string;
   status: RequestStatus;
   decisionNote: string | null;

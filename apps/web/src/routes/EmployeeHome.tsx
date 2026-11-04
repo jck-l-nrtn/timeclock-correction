@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import { employeeLogout, employeeMe, type EmployeeProfile } from "../api.js";
 import { EmployeeAuth } from "../components/EmployeeAuth.js";
 import { TimesheetPage } from "../components/TimesheetPage.js";
-import { RequestList } from "../components/RequestList.js";
 import { HubHome, type HubView } from "../components/HubHome.js";
 import { HolidaysView } from "../components/HolidaysView.js";
 import { EmployeeInfo } from "../components/EmployeeInfo.js";
@@ -66,8 +65,7 @@ function Hub({ profile, onSignOut }: { profile: EmployeeProfile; onSignOut: () =
       </div>
 
       {view === "home" && <HubHome profile={profile} onNavigate={setView} />}
-      {(view === "timesheet" || view === "report") && <TimesheetPage profile={profile} />}
-      {view === "requests" && <RequestList />}
+      {view === "timesheet" && <TimesheetPage profile={profile} />}
       {view === "timeoff" && <TimeOffView profile={profile} />}
       {view === "holidays" && <HolidaysView />}
       {view === "info" && <EmployeeInfo profile={profile} />}

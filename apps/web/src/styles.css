@@ -1098,3 +1098,21 @@ code {
 .accrual-sample { margin: 0.75rem 0.2rem 0; font-style: italic; font-size: 0.82rem; }
 
 .accrual-ot { color: #b2541a; font-weight: 700; }
+
+/* ===== Request status lists (in timesheet / time off) ===== */
+.req-list { list-style: none; padding: 0; margin: 0.75rem 0 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.req-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.7rem 0.85rem; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; }
+.req-main { min-width: 0; }
+.req-summary { font-size: 0.95rem; color: var(--text); }
+.req-note { font-size: 0.82rem; margin-top: 0.15rem; overflow-wrap: anywhere; }
+.section-sub { font-size: 1rem; margin: 1.5rem 0 0; padding-top: 1rem; border-top: 1px solid var(--border); }
+
+/* ===== Admin employees lookup ===== */
+.emp-search { width: 100%; margin: 0.5rem 0 1rem; }
+.emp-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+.emp-row { display: grid; grid-template-columns: 1fr auto auto; gap: 0.75rem; align-items: center; width: 100%; text-align: left; font: inherit; cursor: pointer; padding: 0.7rem 0.9rem; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; }
+.emp-row:hover { border-color: var(--accent); }
+.emp-name { font-weight: 600; }
+.emp-email { font-size: 0.85rem; }
+.emp-go { color: var(--accent-strong); font-weight: 600; font-size: 0.85rem; }
+@media (max-width: 560px) { .emp-row { grid-template-columns: 1fr auto; } .emp-email { display: none; } }

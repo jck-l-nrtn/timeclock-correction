@@ -1,7 +1,7 @@
 import { QUICK_LINKS } from "../hubConfig.js";
 import type { EmployeeProfile } from "../api.js";
 
-export type HubView = "timesheet" | "report" | "requests" | "timeoff" | "holidays" | "info";
+export type HubView = "timesheet" | "timeoff" | "holidays" | "info";
 
 const LINK_ICON: Record<string, string> = { Payroll: "💵", "Reimbursement form": "🧾" };
 
@@ -15,10 +15,8 @@ export function HubHome({
   const first = profile.fullName.split(" ")[0] || "there";
 
   const cards: { icon: string; title: string; desc: string; view: HubView }[] = [
-    { icon: "🕒", title: "My Timesheet", desc: "See your clock-ins and clock-outs", view: "timesheet" },
-    { icon: "✏️", title: "Request a Correction", desc: "Fix a missed or wrong timeclock entry", view: "report" },
-    { icon: "🌴", title: "Time Off", desc: "Your PTO balance and time-off requests", view: "timeoff" },
-    { icon: "📋", title: "My Requests", desc: "Track your correction & time-off requests", view: "requests" },
+    { icon: "🕒", title: "My Timesheet", desc: "Your hours, correct entries, and request status", view: "timesheet" },
+    { icon: "🌴", title: "Time Off", desc: "PTO balance, request time off, and request status", view: "timeoff" },
     { icon: "📅", title: "Paid Holidays", desc: "Company holiday schedule", view: "holidays" },
     { icon: "👤", title: "My Info", desc: "Your employee details", view: "info" },
   ];

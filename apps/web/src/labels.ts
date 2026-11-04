@@ -16,6 +16,7 @@ export function ptoTypeLabel(t: string | null): string {
 /** One-line summary of a request (timeclock correction or PTO). */
 export function summarizeRequest(r: CorrectionRequestDTO): string {
   if (r.kind === "timeoff") {
+    if (r.ptoType === "payout") return `PTO payout · ${r.payoutHours ?? 0} hours`;
     const range = r.endDate && r.endDate !== r.startDate ? `${r.startDate} – ${r.endDate}` : r.startDate;
     return `${ptoTypeLabel(r.ptoType)} time off · ${range}`;
   }

@@ -18,6 +18,7 @@ import { GoogleButton } from "../components/GoogleButton.js";
 import { QueueItem } from "../components/QueueItem.js";
 import { AdminRequestsCalendar } from "../components/AdminRequestsCalendar.js";
 import { PtoAccrual } from "../components/PtoAccrual.js";
+import { AdminEmployees } from "../components/AdminEmployees.js";
 import { summarizeRequest } from "../labels.js";
 
 /**
@@ -120,10 +121,11 @@ function AdminLogin({ onLogin }: { onLogin: (s: AdminSession) => void }) {
   );
 }
 
-type AdminTab = "timeclock" | "timeoff" | "org" | "users";
+type AdminTab = "timeclock" | "timeoff" | "employees" | "org" | "users";
 const NAV: { id: AdminTab; label: string }[] = [
   { id: "timeclock", label: "Timeclock" },
   { id: "timeoff", label: "Time off" },
+  { id: "employees", label: "Employees" },
   { id: "org", label: "Org chart" },
   { id: "users", label: "Add people" },
 ];
@@ -172,6 +174,7 @@ function AdminShell({ session, onSignOut }: { session: AdminSession; onSignOut: 
           <AdminQueue kind="timeoff" />
         </>
       )}
+      {tab === "employees" && <AdminEmployees />}
       {tab === "org" && <OrgPeople />}
       {tab === "users" && <AdminUsers />}
     </div>

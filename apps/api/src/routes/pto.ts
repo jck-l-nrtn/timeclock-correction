@@ -35,8 +35,9 @@ ptoRouter.post("/", async (req, res) => {
     employeeEmail: input.employeeEmail,
     jibblePersonId: input.jibblePersonId ?? null,
     ptoType: input.ptoType,
-    startDate: input.startDate,
-    endDate: input.endDate,
+    startDate: input.startDate ?? null,
+    endDate: input.endDate ?? null,
+    payoutHours: input.payoutHours ?? null,
     reason: input.reason,
   });
 
