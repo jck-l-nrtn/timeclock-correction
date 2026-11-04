@@ -22,7 +22,7 @@ publishes the web app to S3, and invalidates CloudFront. Prints the app URL.
 ## Secrets
 - `apps/api/.env` → `JIBBLE_CLIENT_ID`, `JIBBLE_CLIENT_SECRET`.
 - `aws/.deploy.env` (gitignored) → `SESSION_SECRET`, `REPORT_TOKEN`, `WEB_ORIGIN`,
-  `EMAIL_FROM`, `NOTIFY_EMAIL_TO`, `RESEND_API_KEY`.
+  `EMAIL_FROM`, `NOTIFY_EMAIL_TO`.
 
 To change a secret on the running app, edit those and re-run `./aws/deploy.sh`.
 
@@ -40,6 +40,9 @@ After the stack exists:
 ## Notes
 - **Jibble key:** admin sign-in calls Jibble, so a **valid** `JIBBLE_CLIENT_ID/SECRET`
   is required for anyone to log in. The timesheet / My Info / PTO balance also need it.
-- **Email:** set `RESEND_API_KEY` in `aws/.deploy.env` to enable notifications + the weekly PDF.
+- **Email:** AWS SES via the Lambda's IAM role (`EMAIL_PROVIDER=ses`). `EMAIL_FROM`
+  must be a **verified SES identity** (`montanepm.com` is verified + DKIM, so any
+  `…@montanepm.com` works). No SMTP credentials. Notifications + the weekly PDF go to
+  `NOTIFY_EMAIL_TO`. The account is out of the SES sandbox (can email anyone).
 - The old container-image path (`Dockerfile.lambda`, `.github/workflows/deploy-aws.yml`)
   is superseded by the zip flow above.

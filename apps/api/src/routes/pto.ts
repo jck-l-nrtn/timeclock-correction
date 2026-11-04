@@ -41,6 +41,11 @@ ptoRouter.post("/", async (req, res) => {
   });
 
   const dto = toCorrectionRequestDTO(row);
-  notifier.newRequestSubmitted(dto).catch((err) => console.error("[pto] notify failed:", err));
+  // Await so the email send completes before Lambda freezes the execution env.
+  try {
+    await notifier.newRequestSubmitted(dto);
+  } catch (err) {
+    console.error("[pto] notify failed:", err);
+  }
   return res.status(201).json(dto);
 });

@@ -1,7 +1,7 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >
   Montane Packaging Timeclock — serverless. DynamoDB (single table) + Lambda
-  (container image) behind CloudFront, which serves the React app from S3 and
+  behind CloudFront (via API Gateway), which serves the React app from S3 and
   routes /api/* to the function (same origin, so cookies work).
 
 Parameters:
@@ -18,8 +18,7 @@ Parameters:
   JibbleClientId: { Type: String }
   JibbleClientSecret: { Type: String, NoEcho: true }
   SessionSecret: { Type: String, NoEcho: true }
-  ResendApiKey: { Type: String, NoEcho: true }
-  EmailFrom: { Type: String, Default: onboarding@resend.dev }
+  EmailFrom: { Type: String, Default: timeclock@montanepm.com, Description: Verified SES sender. }
   NotifyEmailTo: { Type: String }
   ReportToken: { Type: String, NoEcho: true }
 
@@ -86,6 +85,11 @@ Resources:
                 Resource:
                   - !GetAtt Table.Arn
                   - !Sub "${Table.Arn}/index/*"
+              - Effect: Allow
+                Action:
+                  - ses:SendEmail
+                  - ses:SendRawEmail
+                Resource: "*"
 
   Fn:
     Type: AWS::Lambda::Function
@@ -109,10 +113,7 @@ Resources:
           JIBBLE_CLIENT_ID: !Ref JibbleClientId
           JIBBLE_CLIENT_SECRET: !Ref JibbleClientSecret
           SESSION_SECRET: !Ref SessionSecret
-          SMTP_HOST: smtp.resend.com
-          SMTP_PORT: "587"
-          SMTP_USER: resend
-          SMTP_PASS: !Ref ResendApiKey
+          EMAIL_PROVIDER: ses
           EMAIL_FROM: !Ref EmailFrom
           NOTIFY_EMAIL_TO: !Ref NotifyEmailTo
           REPORT_TOKEN: !Ref ReportToken

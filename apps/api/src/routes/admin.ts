@@ -167,6 +167,11 @@ adminRouter.post("/requests/:id/decision", async (req, res) => {
   const saved = await data.putRequest(row);
 
   const dto = toCorrectionRequestDTO(saved);
-  notifier.requestDecided(dto).catch((e) => console.error("[admin] notify failed:", e));
+  // Await so the email send completes before Lambda freezes the execution env.
+  try {
+    await notifier.requestDecided(dto);
+  } catch (e) {
+    console.error("[admin] notify failed:", e);
+  }
   return res.json(dto);
 });

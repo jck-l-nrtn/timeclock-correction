@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.679.0",
+    "@aws-sdk/client-ses": "^3.679.0",
     "@aws-sdk/lib-dynamodb": "^3.679.0",
     "@codegenie/serverless-express": "^4.16.0",
     "@timesheet/shared": "*",

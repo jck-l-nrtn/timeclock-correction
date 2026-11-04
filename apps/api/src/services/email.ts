@@ -1,37 +1,43 @@
 import nodemailer from "nodemailer";
+import { SES, SendRawEmailCommand } from "@aws-sdk/client-ses";
 import { config } from "../config.js";
 
 /**
- * Email over SMTP. Provider-agnostic: point SMTP_* at Gmail, Amazon SES, Resend,
- * Mailgun, etc. If SMTP isn't configured, calls become console logs so the app
- * still runs (and dev doesn't need a mail server).
+ * Email. Default transport is AWS SES via the Lambda's IAM role (EMAIL_PROVIDER
+ * = "ses" + a verified EMAIL_FROM). Alternatives: SMTP (SMTP_*) or Gmail OAuth2.
+ * If nothing is configured, calls become console logs so the app still runs.
  */
 const g = config.email.gmail;
 const gmailReady = Boolean(g.user && g.clientId && g.clientSecret && g.refreshToken);
 const smtpReady = Boolean(config.email.smtpHost && config.email.smtpUser);
+const sesReady = config.email.provider === "ses" && Boolean(config.email.from);
 
 // Effective "from": explicit EMAIL_FROM, else the Gmail account.
 const fromAddress = config.email.from || (gmailReady ? g.user : "");
 
-const transport = gmailReady
+const transport = sesReady
   ? nodemailer.createTransport({
-      service: "gmail",
-      auth: {
-        type: "OAuth2",
-        user: g.user,
-        clientId: g.clientId,
-        clientSecret: g.clientSecret,
-        refreshToken: g.refreshToken,
-      },
+      SES: { ses: new SES({ region: config.aws.region }), aws: { SendRawEmailCommand } },
     })
-  : smtpReady
+  : gmailReady
     ? nodemailer.createTransport({
-        host: config.email.smtpHost,
-        port: config.email.smtpPort,
-        secure: config.email.smtpPort === 465, // 465 = implicit TLS; 587 = STARTTLS
-        auth: { user: config.email.smtpUser, pass: config.email.smtpPass },
+        service: "gmail",
+        auth: {
+          type: "OAuth2",
+          user: g.user,
+          clientId: g.clientId,
+          clientSecret: g.clientSecret,
+          refreshToken: g.refreshToken,
+        },
       })
-    : null;
+    : smtpReady
+      ? nodemailer.createTransport({
+          host: config.email.smtpHost,
+          port: config.email.smtpPort,
+          secure: config.email.smtpPort === 465, // 465 = implicit TLS; 587 = STARTTLS
+          auth: { user: config.email.smtpUser, pass: config.email.smtpPass },
+        })
+      : null;
 
 export const emailConfigured = Boolean(transport && fromAddress);
 

@@ -33,10 +33,12 @@ export const config = {
     webhookUrl: optional("NOTIFY_WEBHOOK_URL"),
   },
 
-  // Email. Two ways to send:
-  //   1. Gmail via OAuth2 — set GMAIL_USER + GOOGLE_CLIENT_ID/SECRET/REFRESH_TOKEN.
-  //   2. Plain SMTP (SES, Resend, Mailgun, Gmail app password, etc.) — set SMTP_*.
+  // Email. EMAIL_PROVIDER picks the transport:
+  //   "ses"  (default) — AWS SES via the Lambda's IAM role; just set EMAIL_FROM
+  //                      to a verified SES sender. No SMTP credentials needed.
+  //   "smtp" — plain SMTP (set SMTP_*), or Gmail OAuth2 (set GMAIL_*/GOOGLE_*).
   email: {
+    provider: optional("EMAIL_PROVIDER", "ses"),
     smtpHost: optional("SMTP_HOST"),
     smtpPort: Number(optional("SMTP_PORT", "587")),
     smtpUser: optional("SMTP_USER"),

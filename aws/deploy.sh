@@ -5,8 +5,9 @@
 #   ./aws/deploy.sh
 #
 # Secrets: Jibble id/secret come from apps/api/.env; the rest from aws/.deploy.env
-# (gitignored — SESSION_SECRET, REPORT_TOKEN, RESEND_API_KEY, NOTIFY_EMAIL_TO,
-# WEB_ORIGIN, EMAIL_FROM). Missing SESSION_SECRET/REPORT_TOKEN are generated.
+# (gitignored — SESSION_SECRET, REPORT_TOKEN, NOTIFY_EMAIL_TO, WEB_ORIGIN,
+# EMAIL_FROM). Email uses AWS SES via the Lambda's IAM role (no SMTP creds).
+# Missing SESSION_SECRET/REPORT_TOKEN are generated.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -22,9 +23,8 @@ set +a
 : "${SESSION_SECRET:=$(openssl rand -hex 32)}"
 : "${REPORT_TOKEN:=$(openssl rand -hex 24)}"
 : "${WEB_ORIGIN:=https://staff.montanepm.com}"
-: "${RESEND_API_KEY:=unset}"
 : "${NOTIFY_EMAIL_TO:=admin@montanepm.com}"
-: "${EMAIL_FROM:=onboarding@resend.dev}"
+: "${EMAIL_FROM:=timeclock@montanepm.com}"
 
 echo "==> Build"
 npm run build:shared >/dev/null
@@ -51,7 +51,7 @@ aws cloudformation deploy --region "$REGION" --stack-name "$STACK" \
   --template-file aws/template.yaml --capabilities CAPABILITY_IAM --no-fail-on-empty-changeset \
   --parameter-overrides CodeS3Bucket="$CODEBUCKET" CodeS3Key="$KEY" WebOrigin="$WEB_ORIGIN" \
     JibbleClientId="$JIBBLE_CLIENT_ID" JibbleClientSecret="$JIBBLE_CLIENT_SECRET" \
-    SessionSecret="$SESSION_SECRET" ResendApiKey="$RESEND_API_KEY" EmailFrom="$EMAIL_FROM" \
+    SessionSecret="$SESSION_SECRET" EmailFrom="$EMAIL_FROM" \
     NotifyEmailTo="$NOTIFY_EMAIL_TO" ReportToken="$REPORT_TOKEN"
 
 echo "==> Publish web"
