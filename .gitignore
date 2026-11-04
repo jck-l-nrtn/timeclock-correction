@@ -27,3 +27,5 @@ apps/api/src/generated/
 
 # AWS deploy secrets
 aws/.deploy.env
+
+*.tsbuildinfo
