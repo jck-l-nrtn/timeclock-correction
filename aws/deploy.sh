@@ -25,6 +25,8 @@ set +a
 : "${WEB_ORIGIN:=https://staff.montanepm.com}"
 : "${NOTIFY_EMAIL_TO:=admin@montanepm.com}"
 : "${EMAIL_FROM:=timeclock@montanepm.com}"
+: "${ACM_CERT_ARN:=}"
+: "${CUSTOM_DOMAIN:=staff.montanepm.com}"
 
 echo "==> Build"
 npm run build:shared >/dev/null
@@ -52,7 +54,8 @@ aws cloudformation deploy --region "$REGION" --stack-name "$STACK" \
   --parameter-overrides CodeS3Bucket="$CODEBUCKET" CodeS3Key="$KEY" WebOrigin="$WEB_ORIGIN" \
     JibbleClientId="$JIBBLE_CLIENT_ID" JibbleClientSecret="$JIBBLE_CLIENT_SECRET" \
     SessionSecret="$SESSION_SECRET" EmailFrom="$EMAIL_FROM" \
-    NotifyEmailTo="$NOTIFY_EMAIL_TO" ReportToken="$REPORT_TOKEN"
+    NotifyEmailTo="$NOTIFY_EMAIL_TO" ReportToken="$REPORT_TOKEN" \
+    AcmCertArn="$ACM_CERT_ARN" CustomDomain="$CUSTOM_DOMAIN"
 
 echo "==> Publish web"
 WEBBUCKET=$(aws cloudformation describe-stacks --stack-name "$STACK" --query "Stacks[0].Outputs[?OutputKey=='WebBucketName'].OutputValue" --output text)

@@ -21,6 +21,17 @@ Parameters:
   EmailFrom: { Type: String, Default: timeclock@montanepm.com, Description: Verified SES sender. }
   NotifyEmailTo: { Type: String }
   ReportToken: { Type: String, NoEcho: true }
+  CustomDomain:
+    Type: String
+    Default: staff.montanepm.com
+    Description: Alternate domain for CloudFront (used only when AcmCertArn is set).
+  AcmCertArn:
+    Type: String
+    Default: ""
+    Description: ACM cert ARN (us-east-1) for CustomDomain. Empty = CloudFront default cert only.
+
+Conditions:
+  HasCustomDomain: !Not [!Equals [!Ref AcmCertArn, ""]]
 
 Resources:
   # ---- DynamoDB single table --------------------------------------------
@@ -223,6 +234,13 @@ Resources:
         Enabled: true
         DefaultRootObject: index.html
         PriceClass: PriceClass_100
+        Aliases: !If [HasCustomDomain, [!Ref CustomDomain], !Ref "AWS::NoValue"]
+        ViewerCertificate: !If
+          - HasCustomDomain
+          - AcmCertificateArn: !Ref AcmCertArn
+            SslSupportMethod: sni-only
+            MinimumProtocolVersion: TLSv1.2_2021
+          - CloudFrontDefaultCertificate: true
         Origins:
           - Id: s3
             DomainName: !GetAtt WebBucket.RegionalDomainName
